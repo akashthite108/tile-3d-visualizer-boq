@@ -93,16 +93,29 @@
       overflow: hidden; display: flex; flex-direction: column; transition: transform 0.14s ease, box-shadow 0.14s ease;
     }
     .card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.06); }
-    .card-thumb { width: 100%; height: 140px; object-fit: cover; background: #e7e5e4; }
+    .card-thumb-wrap { position: relative; cursor: zoom-in; overflow: hidden; background: #e7e5e4; }
+    .card-thumb { width: 100%; height: 140px; object-fit: cover; display: block; transition: transform 0.2s ease; }
+    .card-thumb-wrap:hover .card-thumb { transform: scale(1.04); }
+    .zoom-badge {
+      position: absolute; bottom: 6px; right: 6px;
+      background: rgba(24, 24, 27, 0.78); color: #fff;
+      font-size: 10.5px; padding: 3px 7px; border-radius: 4px; pointer-events: none;
+    }
     .card-body { padding: 11px 13px; flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
     .card-series { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); font-weight: 700; }
     .card-title { font-size: 13.5px; font-weight: 700; margin: 3px 0; word-break: break-word; }
     .card-meta { font-size: 11.5px; color: var(--muted); margin-bottom: 9px; }
+    .card-actions { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
     .card-btn {
       width: 100%; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--ink);
       background: transparent; color: var(--ink); font-size: 12px; font-weight: 600; cursor: pointer;
     }
     .card-btn:hover { background: var(--ink); color: #fff; }
+    .inspect-btn {
+      padding: 7px 9px; border-radius: 6px; border: 1px solid var(--line);
+      background: var(--bg); color: var(--ink); font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .inspect-btn:hover { border-color: var(--accent); color: var(--accent); }
 
     .load-more-wrap { display: flex; justify-content: center; margin-top: 20px; }
     .load-more-btn {
@@ -161,6 +174,47 @@
     }
     .csv-btn:hover { background: var(--ink); color: #fff; }
 
+    /* Texture Inspector Modal */
+    .modal-backdrop {
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(15, 23, 42, 0.78); backdrop-filter: blur(4px);
+      display: none; align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-box {
+      background: var(--surface); border-radius: 12px; max-width: 920px; width: 100%;
+      overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+      display: grid; grid-template-columns: 1.35fr 1fr;
+    }
+    @media (max-width: 780px) { .modal-box { grid-template-columns: 1fr; } }
+    .modal-stage {
+      position: relative; background: #18191c; height: 460px; overflow: hidden;
+      cursor: grab; display: flex; align-items: center; justify-content: center; user-select: none;
+    }
+    .modal-stage:active { cursor: grabbing; }
+    .modal-stage img {
+      max-width: 100%; max-height: 100%; object-fit: contain;
+      transform-origin: center center; pointer-events: none;
+    }
+    .modal-stage-hint {
+      position: absolute; bottom: 10px; left: 10px;
+      background: rgba(15, 23, 42, 0.78); color: #e2e8f0;
+      font-size: 11px; padding: 5px 8px; border-radius: 6px; pointer-events: none;
+    }
+    .modal-info {
+      padding: 20px; display: flex; flex-direction: column; justify-content: space-between; gap: 14px;
+    }
+    .modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+    .modal-close {
+      background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+      width: 30px; height: 30px; font-size: 16px; cursor: pointer; color: var(--ink);
+    }
+    .modal-close:hover { background: var(--ink); color: #fff; }
+    .modal-specs { font-size: 12.5px; color: var(--muted); line-height: 1.7; margin-top: 8px; }
+    .modal-specs strong { color: var(--ink); }
+    .zoom-ctrl { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+    .zoom-ctrl-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-bottom: 6px; }
+
     footer { background: #18181b; color: #d4d4d8; padding: 28px 20px; }
     .foot-wrap { max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; font-size: 12.5px; }
   </style>
@@ -194,7 +248,7 @@
     <div class="hero-inner">
       <div class="eyebrow">Simpolo Surface Library</div>
       <h1 id="heroTitle">Explore Every Series in 3D</h1>
-      <p id="heroDesc">Search and filter across your full Simpolo catalog in web_assets, test staggered or grid laying patterns with custom grout lines, and generate a piece-count BOQ.</p>
+      <p id="heroDesc">Search and filter across your full Simpolo catalog in web_assets, inspect textures up to 6x zoom, test staggered or grid layouts with custom grout lines, and generate a piece-count BOQ.</p>
       <div class="hero-pills" id="heroSeriesPills"></div>
     </div>
   </section>
@@ -244,6 +298,15 @@
 
           <label for="skuSelect">Active Surface SKU</label>
           <select id="skuSelect"></select>
+
+          <label for="finishPreset">Surface Finish Preset</label>
+          <select id="finishPreset">
+            <option value="catalog">Catalog Default</option>
+            <option value="satin">Satin / Carving</option>
+            <option value="gloss">High-Gloss Polish</option>
+            <option value="matt">Soft Matt</option>
+            <option value="rustic">Rustic / Textured</option>
+          </select>
           <div class="face-note" id="faceInfo">Shader faces: detecting...</div>
 
           <h3>Shader Pattern, Grout &amp; Openings</h3>
@@ -286,6 +349,12 @@
             <input id="toggleSkirting" type="checkbox" checked />
           </label>
 
+          <label for="skirtingMode">Skirting Perimeter Basis</label>
+          <select id="skirtingMode">
+            <option value="4wall">Full 4-Wall Room (2 &times; (W + D))</option>
+            <option value="2wall">2 Rendered Walls Only (W + D)</option>
+          </select>
+
           <label for="reliefSlider">Surface Relief: <span id="reliefVal">1.00</span></label>
           <input id="reliefSlider" type="range" min="0" max="2.5" step="0.05" value="1.0" />
 
@@ -308,6 +377,36 @@
     </section>
   </div>
 
+  <!-- Click-to-Zoom Texture Inspector Modal -->
+  <div class="modal-backdrop" id="inspectorModal" aria-hidden="true">
+    <div class="modal-box">
+      <div class="modal-stage" id="modalStage">
+        <img id="modalImg" src="" alt="Texture preview" />
+        <div class="modal-stage-hint">Scroll or slide to zoom (up to 6x) &bull; Drag to pan</div>
+      </div>
+      <div class="modal-info">
+        <div>
+          <div class="modal-head">
+            <div>
+              <div class="card-series" id="modalSeries"></div>
+              <h3 style="margin:4px 0 0; font-size:18px;" id="modalTitle"></h3>
+            </div>
+            <button class="modal-close" id="modalCloseBtn" title="Close">&times;</button>
+          </div>
+          <div class="modal-specs" id="modalSpecs"></div>
+          <div class="zoom-ctrl">
+            <div class="zoom-ctrl-row">
+              <span>Zoom: <strong id="modalZoomLabel">1.0x</strong></span>
+              <button class="inspect-btn" id="modalResetZoom">Reset</button>
+            </div>
+            <input id="modalZoomSlider" type="range" min="1" max="6" step="0.1" value="1" />
+          </div>
+        </div>
+        <button class="copy-btn" id="modalApplyBtn">Apply to Active 3D Surface</button>
+      </div>
+    </div>
+  </div>
+
   <footer>
     <div class="foot-wrap">
       <div><strong>SIMPOLO</strong> &mdash; Full Catalog 3D Visualizer</div>
@@ -322,6 +421,14 @@
 
     const PAGE_SIZE = 48;
     const FACE_TEX_SIZE = 512;
+
+    const FINISH_PRESETS = {
+      satin: { roughness: 0.34, metalness: 0.02, clearcoat: 0.22, clearcoatRoughness: 0.28 },
+      gloss: { roughness: 0.08, metalness: 0.03, clearcoat: 0.85, clearcoatRoughness: 0.06 },
+      matt: { roughness: 0.65, metalness: 0.01, clearcoat: 0.05, clearcoatRoughness: 0.55 },
+      rustic: { roughness: 0.82, metalness: 0.01, clearcoat: 0.0, clearcoatRoughness: 0.70 },
+    };
+
     let catalogItems = [];
     let filteredItems = [];
     let visibleCount = PAGE_SIZE;
@@ -330,6 +437,15 @@
     const siblingIndex = new Map();
     const arrayTexCache = new Map();
     const imagePromiseCache = new Map();
+
+    function escHtml(v) {
+      return String(v ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
 
     function numInput(id, fallback, min = -Infinity, max = Infinity, writeBack = false) {
       const el = document.getElementById(id);
@@ -483,14 +599,38 @@
     scene.add(sideWallMesh);
 
     const surfaceState = {
-      floor: { label: "Floor", mesh: floorMesh, widthM: 5.0, heightM: 4.0, skuId: null, pattern: "grid", groutMm: 2.0, groutHex: "#e2dfd9" },
-      backWall: { label: "Feature Wall", mesh: backWallMesh, widthM: 5.0, heightM: 3.0, skuId: null, pattern: "grid", groutMm: 2.0, groutHex: "#e2dfd9" },
-      sideWall: { label: "Side Wall", mesh: sideWallMesh, widthM: 4.0, heightM: 3.0, skuId: null, pattern: "grid", groutMm: 2.0, groutHex: "#e2dfd9" }
+      floor: { label: "Floor", mesh: floorMesh, widthM: 5.0, heightM: 4.0, skuId: null, pattern: "grid", groutMm: 2.0, groutHex: "#e2dfd9", finish: "catalog", renderSeq: 0 },
+      backWall: { label: "Feature Wall", mesh: backWallMesh, widthM: 5.0, heightM: 3.0, skuId: null, pattern: "grid", groutMm: 2.0, groutHex: "#e2dfd9", finish: "catalog", renderSeq: 0 },
+      sideWall: { label: "Side Wall", mesh: sideWallMesh, widthM: 4.0, heightM: 3.0, skuId: null, pattern: "grid", groutMm: 2.0, groutHex: "#e2dfd9", finish: "catalog", renderSeq: 0 }
     };
 
     function getSurfaceSku(surfKey) {
       const cfg = surfaceState[surfKey];
       return catalogItems.find((i) => i.id === cfg?.skuId) || null;
+    }
+
+    function resolveFinishProps(sku, presetKey) {
+      if (presetKey && FINISH_PRESETS[presetKey]) return FINISH_PRESETS[presetKey];
+      const pbr = sku?.pbr || {};
+      return {
+        roughness: pbr.roughness ?? 0.28,
+        metalness: pbr.metalness ?? 0.02,
+        clearcoat: pbr.clearcoat ?? 0.25,
+        clearcoatRoughness: pbr.clearcoatRoughness ?? 0.16,
+      };
+    }
+
+    function applyFinishToMaterial(surfKey) {
+      const cfg = surfaceState[surfKey];
+      const sku = getSurfaceSku(surfKey);
+      const mat = cfg?.mesh?.material;
+      if (!mat || !sku) return;
+      const f = resolveFinishProps(sku, cfg.finish);
+      mat.roughness = f.roughness;
+      mat.metalness = f.metalness;
+      if ("clearcoat" in mat) mat.clearcoat = f.clearcoat;
+      if ("clearcoatRoughness" in mat) mat.clearcoatRoughness = f.clearcoatRoughness;
+      mat.needsUpdate = false;
     }
 
     function applyGpuTileShader(mat, uniforms) {
@@ -508,7 +648,7 @@
           .replace(
             "#include <uv_vertex>",
             `#include <uv_vertex>
-             vTileSurfaceMeters = vMapUv * uSurfaceMeters;`
+             vTileSurfaceMeters = uv * uSurfaceMeters;`
           );
 
         shader.fragmentShader = shader.fragmentShader
@@ -532,9 +672,9 @@
                return fract(p.x * p.y);
              }
 
-             vec2 rotateTileUv(vec2 uv, float turns) {
-               vec2 centered = uv - 0.5;
-               if (turns < 0.5) return uv;
+             vec2 rotateTileUv(vec2 uvCoord, float turns) {
+               vec2 centered = uvCoord - 0.5;
+               if (turns < 0.5) return uvCoord;
                if (turns < 1.5) return vec2(-centered.y, centered.x) + 0.5;
                if (turns < 2.5) return vec2(-centered.x, -centered.y) + 0.5;
                return vec2(centered.y, -centered.x) + 0.5;
@@ -559,7 +699,9 @@
              float edgeDistY = min(localPosM.y, pitchM.y - localPosM.y);
              float edgeDist = min(edgeDistX, edgeDistY);
              float aaWidth = max(fwidth(edgeDist), 0.0005);
-             float groutMask = (uGroutM > 0.00001) ? (1.0 - smoothstep(max(halfGrout - aaWidth, 0.0), halfGrout + aaWidth, edgeDist)) : 0.0;
+             float simpoloGroutMask = (uGroutM > 0.00001)
+               ? (1.0 - smoothstep(max(halfGrout - aaWidth, 0.0), halfGrout + aaWidth, edgeDist))
+               : 0.0;
 
              vec2 innerUv = clamp(
                (localPosM - vec2(halfGrout)) / max(pitchM - vec2(uGroutM), vec2(0.01)),
@@ -572,38 +714,35 @@
 
              float layerIdx = 0.0;
              if (uCycleFaces > 0.5 && uFaceCount > 1.5) {
-               layerIdx = floor(hFace * uFaceCount);
-               layerIdx = clamp(layerIdx, 0.0, uFaceCount - 1.0);
+               layerIdx = clamp(floor(hFace * uFaceCount), 0.0, uFaceCount - 1.0);
              }
 
-             float rotTurns = (uRotateEnabled > 0.5) ? floor(hRot * 4.0) : 0.0;
+             // Restrict rectangular tiles to 0 or 180 degrees to prevent texture stretching
+             float isSquareTile = step(abs(uTileSizeM.x - uTileSizeM.y), 0.01);
+             float rotTurns = 0.0;
+             if (uRotateEnabled > 0.5) {
+               rotTurns = (isSquareTile > 0.5) ? floor(hRot * 4.0) : (floor(hRot * 2.0) * 2.0);
+             }
              vec2 sampledUv = rotateTileUv(innerUv, rotTurns);
 
              vec4 texSample = texture(uFaceTex, vec3(sampledUv, layerIdx));
              vec3 tileLinear = texSample.rgb;
-             vec3 groutLinear = pow(uGroutColor, vec3(2.2));
-             vec3 finalAlbedo = mix(tileLinear, groutLinear, groutMask);
+             vec3 groutLinear = uGroutColor;
+             vec3 finalAlbedo = mix(tileLinear, groutLinear, simpoloGroutMask);
 
              float luma = dot(tileLinear, vec3(0.299, 0.587, 0.114));
              float grainDelta = (luma - 0.5) * 0.18 * uRelief;
-             finalAlbedo = clamp(finalAlbedo + vec3(grainDelta) * (1.0 - groutMask), 0.0, 1.0);
+             finalAlbedo = clamp(finalAlbedo + vec3(grainDelta) * (1.0 - simpoloGroutMask), 0.0, 1.0);
 
              diffuseColor.rgb *= finalAlbedo;`
           )
           .replace(
             "#include <roughnessmap_fragment>",
             `#include <roughnessmap_fragment>
-             float lumaR = dot(vTileSurfaceMeters, vec2(1.0));
-             float edgeR = min(
-               min(mod(vTileSurfaceMeters.x + ((uStaggered > 0.5 && mod(abs(floor(vTileSurfaceMeters.y / max(uTileSizeM.y + uGroutM, 0.05))), 2.0) > 0.5) ? (uTileSizeM.x + uGroutM) * 0.5 : 0.0), max(uTileSizeM.x + uGroutM, 0.05)), (uTileSizeM.x + uGroutM) - mod(vTileSurfaceMeters.x + ((uStaggered > 0.5 && mod(abs(floor(vTileSurfaceMeters.y / max(uTileSizeM.y + uGroutM, 0.05))), 2.0) > 0.5) ? (uTileSizeM.x + uGroutM) * 0.5 : 0.0), max(uTileSizeM.x + uGroutM, 0.05))),
-               min(mod(vTileSurfaceMeters.y, max(uTileSizeM.y + uGroutM, 0.05)), (uTileSizeM.y + uGroutM) - mod(vTileSurfaceMeters.y, max(uTileSizeM.y + uGroutM, 0.05)))
-             );
-             float gMaskR = (uGroutM > 0.00001) ? (1.0 - smoothstep(max(uGroutM * 0.5 - 0.001, 0.0), uGroutM * 0.5 + 0.001, edgeR)) : 0.0;
-             roughnessFactor = mix(roughnessFactor, 0.92, gMaskR);
-             float unusedVar = lumaR;`
+             roughnessFactor = mix(roughnessFactor, 0.92, simpoloGroutMask);`
           );
       };
-      mat.customProgramCacheKey = () => "simpolo-gpu-tile-shader-v1";
+      mat.customProgramCacheKey = () => "simpolo-gpu-tile-shader-v2";
     }
 
     function updateFaceBadge() {
@@ -612,9 +751,12 @@
       if (!sku) return;
       const cycle = document.getElementById("toggleCycleFaces").checked;
       const rot = document.getElementById("toggleTileRotate").checked;
+      const spec = readTileSpec(sku);
+      const isSq = spec.sizeKnown && Math.abs(spec.widthMm - spec.heightMm) <= 10;
+      const rotLabel = !rot ? "OFF" : (isSq ? "0/90/180/270°" : "0/180°");
       const faces = getSiblingFaces(sku).map((f) => f.name);
       document.getElementById("faceInfo").textContent =
-        `Shader faces (${faces.length}): ${faces.slice(0, 4).join(", ")}${faces.length > 4 ? "…" : ""} • Cycle: ${cycle ? "ON" : "OFF"} • Rot: ${rot ? "ON" : "OFF"}`;
+        `Shader faces (${faces.length}): ${faces.slice(0, 4).join(", ")}${faces.length > 4 ? "…" : ""} • Cycle: ${cycle ? "ON" : "OFF"} • Rot: ${rotLabel}`;
     }
 
     function syncShaderUniformsOnly() {
@@ -643,18 +785,20 @@
       const sku = getSurfaceSku(surfKey);
       if (!sku) return;
 
+      const mySeq = ++cfg.renderSeq;
       const spec = readTileSpec(sku);
       const tileW_m = (spec.widthMm || 600) / 1000;
       const tileH_m = (spec.heightMm || 1200) / 1000;
       const arrEntry = await getSiblingArrayTexture(sku);
-      const pbr = sku.pbr || {};
+      if (mySeq !== cfg.renderSeq) return; // Ignore stale async response
 
+      const finish = resolveFinishProps(sku, cfg.finish);
       const mat = new THREE.MeshPhysicalMaterial({
         color: new THREE.Color("#ffffff"),
-        roughness: pbr.roughness ?? 0.28,
-        metalness: pbr.metalness ?? 0.02,
-        clearcoat: pbr.clearcoat ?? 0.25,
-        clearcoatRoughness: pbr.clearcoatRoughness ?? 0.16,
+        roughness: finish.roughness,
+        metalness: finish.metalness,
+        clearcoat: finish.clearcoat,
+        clearcoatRoughness: finish.clearcoatRoughness,
       });
 
       const uniforms = {
@@ -677,7 +821,7 @@
       updateFaceBadge();
     }
 
-    function rebuildRoomGeometry() {
+    function rebuildRoomGeometry(forceMaterials = false) {
       const w = numInput("roomW", 5.0, 2, 20, true);
       const d = numInput("roomD", 4.0, 2, 20, true);
       const h = numInput("roomH", 3.0, 2.2, 6, true);
@@ -696,7 +840,12 @@
       sideWallMesh.geometry = new THREE.PlaneGeometry(d, h);
       sideWallMesh.position.set(-w / 2, h / 2, 0);
 
-      Object.keys(surfaceState).forEach((k) => renderSurfaceMaterial(k));
+      Object.keys(surfaceState).forEach((k) => {
+        if (forceMaterials || !surfaceState[k].mesh.material?.userData?.shaderUniforms) {
+          renderSurfaceMaterial(k);
+        }
+      });
+      syncShaderUniformsOnly();
       updateBoqSummary();
     }
 
@@ -704,6 +853,9 @@
       const w = numInput("roomW", 5.0, 2, 20, true);
       const d = numInput("roomD", 4.0, 2, 20, true);
       const h = numInput("roomH", 3.0, 2.2, 6, true);
+      const skirtMode = document.getElementById("skirtingMode").value;
+      const skirtLengthM = skirtMode === "4wall" ? 2 * (w + d) : (w + d);
+
       return computeBOQ({
         room: { w, d, h },
         surfaces: {
@@ -720,7 +872,7 @@
         },
         skirting: {
           enabled: document.getElementById("toggleSkirting").checked,
-          lengthM: w + d,
+          lengthM: skirtLengthM,
         },
       });
     }
@@ -743,12 +895,12 @@
         const rateText = l.rate !== null ? ` @ ₹${l.rate}` : "";
         const amtText = l.amount !== null ? `₹${l.amount.toLocaleString("en-IN")}` : "—";
         const flagsHtml = (l.flags || []).length
-          ? `<div class="boq-flag">${(l.flags || []).map(flagText).join(" • ")}</div>`
+          ? `<div class="boq-flag">${(l.flags || []).map((f) => escHtml(flagText(f))).join(" • ")}</div>`
           : "";
         return `<div class="boq-line">
-          <div class="boq-row"><strong>${(l.roles || []).join(" + ")}:</strong><span>${l.series} (${l.sizeLabel})</span></div>
-          <div class="boq-row"><span>${pattern} &bull; ${groutMm}mm</span><span>${qtyText}${rateText}</span></div>
-          <div class="boq-row"><span>Line Total:</span><span>${amtText}</span></div>
+          <div class="boq-row"><strong>${escHtml((l.roles || []).join(" + "))}:</strong><span>${escHtml(l.series)} (${escHtml(l.sizeLabel)})</span></div>
+          <div class="boq-row"><span>${escHtml(pattern)} &bull; ${groutMm}mm</span><span>${escHtml(qtyText)}${escHtml(rateText)}</span></div>
+          <div class="boq-row"><span>Line Total:</span><span>${escHtml(amtText)}</span></div>
           ${flagsHtml}
         </div>`;
       }).join("");
@@ -780,6 +932,105 @@
       }
     }
 
+    // ---- Texture Inspector Modal Logic ----
+    const inspectorModal = document.getElementById("inspectorModal");
+    const modalStage = document.getElementById("modalStage");
+    const modalImg = document.getElementById("modalImg");
+    const modalZoomSlider = document.getElementById("modalZoomSlider");
+    const modalZoomLabel = document.getElementById("modalZoomLabel");
+    let modalSku = null;
+    let modalZoom = 1;
+    let modalPanX = 0;
+    let modalPanY = 0;
+    let isDraggingModal = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+
+    function updateModalTransform() {
+      modalImg.style.transform = `translate(${modalPanX}px, ${modalPanY}px) scale(${modalZoom})`;
+      modalZoomSlider.value = String(modalZoom);
+      modalZoomLabel.textContent = `${modalZoom.toFixed(1)}x`;
+    }
+
+    function resetModalZoom() {
+      modalZoom = 1;
+      modalPanX = 0;
+      modalPanY = 0;
+      updateModalTransform();
+    }
+
+    function openInspector(sku) {
+      if (!sku) return;
+      modalSku = sku;
+      const spec = readTileSpec(sku);
+      const faces = getSiblingFaces(sku);
+      document.getElementById("modalSeries").textContent = sku.series || "Simpolo";
+      document.getElementById("modalTitle").textContent = sku.name || sku.id;
+      modalImg.src = sku.pbr?.maps?.albedo || "";
+      modalImg.alt = sku.name || "Tile texture";
+      document.getElementById("modalSpecs").innerHTML = `
+        <div><strong>Dimensions:</strong> ${spec.sizeKnown ? `${spec.widthMm} &times; ${spec.heightMm} mm` : "Unknown"}</div>
+        <div><strong>Look &amp; Feel:</strong> ${escHtml(sku.lookAndFeel || "—")}</div>
+        <div><strong>Finish:</strong> ${escHtml(sku.finish || "Catalog Default")}</div>
+        <div><strong>Rate:</strong> ${spec.rateKnown ? `₹${spec.rate}/sq.ft` : "On request"}</div>
+        <div><strong>Sibling Faces:</strong> ${faces.length} detected</div>
+      `;
+      resetModalZoom();
+      inspectorModal.classList.add("open");
+      inspectorModal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeInspector() {
+      inspectorModal.classList.remove("open");
+      inspectorModal.setAttribute("aria-hidden", "true");
+    }
+
+    modalZoomSlider.addEventListener("input", () => {
+      modalZoom = parseFloat(modalZoomSlider.value) || 1;
+      if (modalZoom <= 1) { modalPanX = 0; modalPanY = 0; }
+      updateModalTransform();
+    });
+
+    modalStage.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.35 : -0.35;
+      modalZoom = Math.min(6, Math.max(1, modalZoom + delta));
+      if (modalZoom <= 1) { modalPanX = 0; modalPanY = 0; }
+      updateModalTransform();
+    }, { passive: false });
+
+    modalStage.addEventListener("pointerdown", (e) => {
+      if (modalZoom <= 1) return;
+      isDraggingModal = true;
+      dragStartX = e.clientX - modalPanX;
+      dragStartY = e.clientY - modalPanY;
+      modalStage.setPointerCapture(e.pointerId);
+    });
+
+    modalStage.addEventListener("pointermove", (e) => {
+      if (!isDraggingModal) return;
+      modalPanX = e.clientX - dragStartX;
+      modalPanY = e.clientY - dragStartY;
+      updateModalTransform();
+    });
+
+    modalStage.addEventListener("pointerup", () => { isDraggingModal = false; });
+    modalStage.addEventListener("pointercancel", () => { isDraggingModal = false; });
+    document.getElementById("modalResetZoom").addEventListener("click", resetModalZoom);
+    document.getElementById("modalCloseBtn").addEventListener("click", closeInspector);
+    inspectorModal.addEventListener("click", (e) => { if (e.target === inspectorModal) closeInspector(); });
+    window.addEventListener("keydown", (e) => { if (e.key === "Escape") closeInspector(); });
+
+    document.getElementById("modalApplyBtn").addEventListener("click", () => {
+      if (!modalSku) return;
+      ensureSkuInDropdown(modalSku);
+      document.getElementById("skuSelect").value = modalSku.id;
+      applySkuChangeToActiveSurface();
+      closeInspector();
+      document.getElementById("visualizer").scrollIntoView({ behavior: "smooth" });
+    });
+
+    // ---- Catalog Rendering ----
     function applyFilterAndRender(resetCount = true) {
       if (resetCount) visibleCount = PAGE_SIZE;
       const q = document.getElementById("searchInput").value.trim().toLowerCase();
@@ -808,14 +1059,20 @@
         const dimLabel = spec.sizeKnown ? `${spec.widthMm}x${spec.heightMm}mm` : "Size unknown";
         const rateLabel = spec.rateKnown ? `₹${spec.rate}/sq.ft` : "Rate on request";
         return `<div class="card">
-          <img class="card-thumb" src="${item.pbr?.maps?.albedo || ""}" alt="${item.name}" loading="lazy" />
+          <div class="card-thumb-wrap" data-inspect-sku="${escHtml(item.id)}">
+            <img class="card-thumb" src="${escHtml(item.pbr?.maps?.albedo || "")}" alt="${escHtml(item.name)}" loading="lazy" />
+            <span class="zoom-badge">6x Zoom</span>
+          </div>
           <div class="card-body">
             <div>
-              <div class="card-series">${item.series}</div>
-              <div class="card-title">${item.name}</div>
-              <div class="card-meta">${dimLabel} &bull; ${rateLabel}</div>
+              <div class="card-series">${escHtml(item.series)}</div>
+              <div class="card-title">${escHtml(item.name)}</div>
+              <div class="card-meta">${escHtml(dimLabel)} &bull; ${escHtml(rateLabel)}</div>
             </div>
-            <button class="card-btn" data-apply-sku="${item.id}">Apply in 3D Room</button>
+            <div class="card-actions">
+              <button class="card-btn" data-apply-sku="${escHtml(item.id)}">Apply in 3D</button>
+              <button class="inspect-btn" data-inspect-sku="${escHtml(item.id)}" title="Inspect Texture">Zoom</button>
+            </div>
           </div>
         </div>`;
       }).join("");
@@ -826,8 +1083,15 @@
           if (!sku) return;
           ensureSkuInDropdown(sku);
           document.getElementById("skuSelect").value = sku.id;
-          applyControlChangeToActiveSurface();
+          applySkuChangeToActiveSurface();
           document.getElementById("visualizer").scrollIntoView({ behavior: "smooth" });
+        });
+      });
+
+      document.querySelectorAll("[data-inspect-sku]").forEach((el) => {
+        el.addEventListener("click", () => {
+          const sku = catalogItems.find((i) => i.id === el.dataset.inspectSku);
+          if (sku) openInspector(sku);
         });
       });
 
@@ -846,14 +1110,14 @@
 
       document.getElementById("seriesFilter").innerHTML =
         `<option value="All">All Series (${seriesList.length})</option>` +
-        seriesList.map((s) => `<option value="${s}">${s}</option>`).join("");
+        seriesList.map((s) => `<option value="${escHtml(s)}">${escHtml(s)}</option>`).join("");
 
       document.getElementById("sizeFilter").innerHTML =
         `<option value="All">All Sizes</option>` +
-        sizeList.map((sz) => `<option value="${sz}">${sz} mm</option>`).join("");
+        sizeList.map((sz) => `<option value="${escHtml(sz)}">${escHtml(sz)} mm</option>`).join("");
 
       document.getElementById("lookTabs").innerHTML = lookList.map((lk) =>
-        `<button class="tab-btn ${lk === activeLook ? "active" : ""}" data-look="${lk}">${lk}</button>`
+        `<button class="tab-btn ${lk === activeLook ? "active" : ""}" data-look="${escHtml(lk)}">${escHtml(lk)}</button>`
       ).join("");
 
       document.querySelectorAll("#lookTabs .tab-btn").forEach((btn) => {
@@ -866,7 +1130,7 @@
 
       const pillsEl = document.getElementById("heroSeriesPills");
       pillsEl.innerHTML = seriesList.slice(0, 8).map((s, idx) =>
-        `<button class="pill-btn ${idx === 0 ? "active" : ""}" data-series="${s}">${s}</button>`
+        `<button class="pill-btn ${idx === 0 ? "active" : ""}" data-series="${escHtml(s)}">${escHtml(s)}</button>`
       ).join("");
 
       pillsEl.querySelectorAll(".pill-btn").forEach((p) => {
@@ -890,6 +1154,7 @@
 
     const surfaceSelect = document.getElementById("surfaceSelect");
     const skuSelect = document.getElementById("skuSelect");
+    const finishPresetSelect = document.getElementById("finishPreset");
     const patternSelect = document.getElementById("patternSelect");
     const groutMmInput = document.getElementById("groutMm");
     const groutColorInput = document.getElementById("groutColor");
@@ -898,32 +1163,44 @@
       const cfg = surfaceState[surfaceSelect.value];
       if (!cfg) return;
       if (cfg.skuId) skuSelect.value = cfg.skuId;
+      finishPresetSelect.value = cfg.finish;
       patternSelect.value = cfg.pattern;
       groutMmInput.value = cfg.groutMm;
       groutColorInput.value = cfg.groutHex;
       updateFaceBadge();
     }
 
-    async function applyControlChangeToActiveSurface() {
+    async function applySkuChangeToActiveSurface() {
       const key = surfaceSelect.value;
       const cfg = surfaceState[key];
       if (!cfg) return;
       cfg.skuId = skuSelect.value;
-      cfg.pattern = patternSelect.value;
-      cfg.groutMm = numInput("groutMm", 2.0, 0, 15, true);
-      cfg.groutHex = groutColorInput.value;
       await renderSurfaceMaterial(key);
       updateBoqSummary();
     }
 
+    function applyUniformChangeToActiveSurface() {
+      const key = surfaceSelect.value;
+      const cfg = surfaceState[key];
+      if (!cfg) return;
+      cfg.pattern = patternSelect.value;
+      cfg.groutMm = numInput("groutMm", 2.0, 0, 15, true);
+      cfg.groutHex = groutColorInput.value;
+      syncShaderUniformsOnly();
+      updateBoqSummary();
+    }
+
     fetch("full_catalog.json")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then(async (data) => {
         catalogItems = data.items || [];
         rebuildSiblingIndex(catalogItems);
 
         skuSelect.innerHTML = catalogItems.slice(0, 200)
-          .map((item) => `<option value="${item.id}">${item.series} — ${item.name}</option>`)
+          .map((item) => `<option value="${escHtml(item.id)}">${escHtml(item.series)} — ${escHtml(item.name)}</option>`)
           .join("");
 
         if (catalogItems.length > 0) {
@@ -944,11 +1221,12 @@
           populateFiltersAndHero();
           applyFilterAndRender(true);
           syncControlsFromActiveSurface();
-          rebuildRoomGeometry();
+          rebuildRoomGeometry(true);
         }
       })
       .catch((err) => {
-        document.getElementById("catalogCount").textContent = "Run build_full_web_catalog.py first to generate full_catalog.json.";
+        document.getElementById("catalogCount").textContent =
+          "Could not load full_catalog.json. Ensure you are running via a local HTTP server from web_prototype/.";
         console.error(err);
       });
 
@@ -961,27 +1239,30 @@
     });
 
     surfaceSelect.addEventListener("change", syncControlsFromActiveSurface);
-    skuSelect.addEventListener("change", applyControlChangeToActiveSurface);
-    patternSelect.addEventListener("change", async () => {
-      await applyControlChangeToActiveSurface();
-      syncShaderUniformsOnly();
+    skuSelect.addEventListener("change", applySkuChangeToActiveSurface);
+    finishPresetSelect.addEventListener("change", () => {
+      const key = surfaceSelect.value;
+      surfaceState[key].finish = finishPresetSelect.value;
+      applyFinishToMaterial(key);
     });
-    groutMmInput.addEventListener("input", async () => {
-      await applyControlChangeToActiveSurface();
-      syncShaderUniformsOnly();
-    });
-    groutColorInput.addEventListener("input", async () => {
-      await applyControlChangeToActiveSurface();
-      syncShaderUniformsOnly();
-    });
+
+    patternSelect.addEventListener("change", applyUniformChangeToActiveSurface);
+    groutMmInput.addEventListener("input", applyUniformChangeToActiveSurface);
+    groutColorInput.addEventListener("input", applyUniformChangeToActiveSurface);
+
     ["toggleCycleFaces", "toggleTileRotate"].forEach((id) => {
       document.getElementById(id).addEventListener("change", syncShaderUniformsOnly);
     });
     document.getElementById("reliefSlider").addEventListener("input", syncShaderUniformsOnly);
 
-    ["roomW", "roomD", "roomH"].forEach((id) => document.getElementById(id).addEventListener("input", rebuildRoomGeometry));
-    ["wastagePct", "openBack", "openSide"].forEach((id) => document.getElementById(id).addEventListener("input", updateBoqSummary));
+    ["roomW", "roomD", "roomH"].forEach((id) => {
+      document.getElementById(id).addEventListener("input", () => rebuildRoomGeometry(false));
+    });
+    ["wastagePct", "openBack", "openSide"].forEach((id) => {
+      document.getElementById(id).addEventListener("input", updateBoqSummary);
+    });
     document.getElementById("toggleSkirting").addEventListener("change", updateBoqSummary);
+    document.getElementById("skirtingMode").addEventListener("change", updateBoqSummary);
 
     const lightSlider = document.getElementById("lightSlider");
     const lightVal = document.getElementById("lightVal");
@@ -993,8 +1274,8 @@
     document.getElementById("exportBoqBtn").addEventListener("click", () => {
       navigator.clipboard?.writeText(document.getElementById("boqSummary").innerText);
       const btn = document.getElementById("exportBoqBtn");
-      btn.textContent = "Copied BOQ Summary!";
-      setTimeout(() => { btn.textContent = "Copy BOQ Summary"; }, 1800);
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = "Copy Summary"; }, 1800);
     });
 
     document.getElementById("exportCsvBtn").addEventListener("click", () => {
@@ -1019,5 +1300,6 @@
       renderer.render(scene, camera);
     })();
   </script>
+  <script type="module" src="./photo_studio.mjs"></script>
 </body>
 </html>

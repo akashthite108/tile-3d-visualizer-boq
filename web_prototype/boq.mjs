@@ -62,7 +62,7 @@ export function groutKgPerSqm(tileWidthMm, tileHeightMm, thicknessMm = 9, jointW
   const density = nonNegNum(densityKgPerL, 1.6);
   if (!w || !h || joint <= 0 || thick <= 0 || density <= 0) return 0;
 
-  const jointLengthMmPerSqm = ((1 / w) + (1 / h)) * 1000;
+  const jointLengthMmPerSqm = ((1 / w) + (1 / h)) * 1e6;
   const volumeLitersPerSqm = (jointLengthMmPerSqm * joint * thick) / 1e6;
   return volumeLitersPerSqm * density;
 }
