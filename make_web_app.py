@@ -154,6 +154,7 @@ HTML = r"""<!DOCTYPE html>
     .g-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
     .check-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; margin-top: 8px; }
     .check-row input { width: auto; }
+    .face-note { font-size: 11px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
 
     .viewer-wrap {
       background: var(--dark-panel); border-radius: 10px; overflow: hidden;
@@ -268,8 +269,9 @@ HTML = r"""<!DOCTYPE html>
 
           <label for="skuSelect">Active Surface SKU</label>
           <select id="skuSelect"></select>
+          <div class="face-note" id="faceInfo">Shader faces: detecting...</div>
 
-          <h3>Pattern, Openings &amp; Grout</h3>
+          <h3>Shader Pattern, Grout &amp; Openings</h3>
           <div class="g-2">
             <div>
               <label for="patternSelect">Layout</label>
@@ -290,14 +292,27 @@ HTML = r"""<!DOCTYPE html>
           </div>
 
           <div class="g-2">
-            <div><label for="openBack">Back Wall Openings (m²)</label><input id="openBack" type="number" min="0" max="50" step="0.1" value="0" /></div>
-            <div><label for="openSide">Side Wall Openings (m²)</label><input id="openSide" type="number" min="0" max="50" step="0.1" value="0" /></div>
+            <div><label for="openBack">Back Wall Openings (m&sup2;)</label><input id="openBack" type="number" min="0" max="50" step="0.1" value="0" /></div>
+            <div><label for="openSide">Side Wall Openings (m&sup2;)</label><input id="openSide" type="number" min="0" max="50" step="0.1" value="0" /></div>
           </div>
+
+          <label class="check-row" for="toggleCycleFaces">
+            <span>Shader Sibling Face Cycling</span>
+            <input id="toggleCycleFaces" type="checkbox" checked />
+          </label>
+
+          <label class="check-row" for="toggleTileRotate">
+            <span>Per-Tile Rotation Variation</span>
+            <input id="toggleTileRotate" type="checkbox" checked />
+          </label>
 
           <label class="check-row" for="toggleSkirting">
             <span>100mm Floor Skirting</span>
             <input id="toggleSkirting" type="checkbox" checked />
           </label>
+
+          <label for="reliefSlider">Surface Relief: <span id="reliefVal">1.00</span></label>
+          <input id="reliefSlider" type="range" min="0" max="2.5" step="0.05" value="1.0" />
 
           <label for="lightSlider">Daylight Intensity: <span id="lightVal">1.35</span></label>
           <input id="lightSlider" type="range" min="0.4" max="2.5" step="0.05" value="1.35" />
@@ -312,7 +327,7 @@ HTML = r"""<!DOCTYPE html>
 
         <div class="viewer-wrap">
           <div id="canvasHost"></div>
-          <div class="viewer-hint">Left-drag: Orbit &bull; Right-drag: Pan &bull; Scroll: Zoom</div>
+          <div class="viewer-hint">GPU Shader Tile Material &bull; Left-drag: Orbit &bull; Right-drag: Pan &bull; Scroll: Zoom</div>
         </div>
       </div>
     </section>
@@ -331,10 +346,15 @@ HTML = r"""<!DOCTYPE html>
     import { computeBOQ, flagText, boqToCsv, readTileSpec } from "./boq.mjs";
 
     const PAGE_SIZE = 48;
+    const FACE_TEX_SIZE = 512;
     let catalogItems = [];
     let filteredItems = [];
     let visibleCount = PAGE_SIZE;
     let activeLook = "All";
+
+    const siblingIndex = new Map();
+    const arrayTexCache = new Map();
+    const imagePromiseCache = new Map();
 
     function numInput(id, fallback, min = -Infinity, max = Infinity, writeBack = false) {
       const el = document.getElementById(id);
@@ -342,6 +362,109 @@ HTML = r"""<!DOCTYPE html>
       const val = Math.min(max, Math.max(min, Number.isFinite(raw) ? raw : fallback));
       if (writeBack && el) el.value = String(val);
       return val;
+    }
+
+    function normalizeDesignKey(item) {
+      const raw = String(item.name || "").toLowerCase().replace(/_/g, " ");
+      const stripped = raw
+        .replace(/\b(r[1-9]|f[1-9]|face[\s-]*[1-9]|closeup[\s-]*[0-9]+)\b/gi, " ")
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim();
+      const spec = readTileSpec(item);
+      const dim = `${spec.widthMm || 600}x${spec.heightMm || 1200}`;
+      return `${item.series || ""}|${dim}|${stripped}`;
+    }
+
+    function rebuildSiblingIndex(items) {
+      siblingIndex.clear();
+      const grouped = new Map();
+      for (const it of items) {
+        if (!it.pbr?.maps?.albedo) continue;
+        const key = normalizeDesignKey(it);
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key).push(it);
+      }
+      for (const [key, list] of grouped.entries()) {
+        const seen = new Set();
+        const unique = [];
+        for (const m of list) {
+          const src = m.pbr.maps.albedo;
+          if (!seen.has(src)) {
+            seen.add(src);
+            unique.push(m);
+          }
+        }
+        unique.sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+        siblingIndex.set(key, unique);
+      }
+    }
+
+    function getSiblingFaces(sku) {
+      if (!sku) return [];
+      const key = normalizeDesignKey(sku);
+      const matches = siblingIndex.get(key);
+      return matches && matches.length ? matches : [sku];
+    }
+
+    function loadHtmlImage(src) {
+      if (imagePromiseCache.has(src)) return imagePromiseCache.get(src);
+      const p = new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.src = src;
+      });
+      imagePromiseCache.set(src, p);
+      return p;
+    }
+
+    async function getSiblingArrayTexture(sku) {
+      const faces = getSiblingFaces(sku);
+      const srcs = faces.map((f) => f.pbr?.maps?.albedo).filter(Boolean);
+      const cacheKey = srcs.length ? srcs.join("|") : `__single__${sku.id}`;
+      if (arrayTexCache.has(cacheKey)) return arrayTexCache.get(cacheKey);
+
+      const depth = Math.max(1, srcs.length);
+      const layerBytes = FACE_TEX_SIZE * FACE_TEX_SIZE * 4;
+      const data = new Uint8Array(layerBytes * depth);
+
+      const scratch = document.createElement("canvas");
+      scratch.width = FACE_TEX_SIZE;
+      scratch.height = FACE_TEX_SIZE;
+      const sctx = scratch.getContext("2d");
+
+      const fallbackHex = sku.pbr?.baseHex || "#d6d3cd";
+      const imgs = await Promise.all(srcs.map(loadHtmlImage));
+
+      for (let layer = 0; layer < depth; layer++) {
+        sctx.clearRect(0, 0, FACE_TEX_SIZE, FACE_TEX_SIZE);
+        const img = imgs[layer];
+        if (img) {
+          sctx.drawImage(img, 0, 0, FACE_TEX_SIZE, FACE_TEX_SIZE);
+        } else {
+          sctx.fillStyle = fallbackHex;
+          sctx.fillRect(0, 0, FACE_TEX_SIZE, FACE_TEX_SIZE);
+        }
+        const rgba = sctx.getImageData(0, 0, FACE_TEX_SIZE, FACE_TEX_SIZE).data;
+        data.set(rgba, layer * layerBytes);
+      }
+
+      const arrTex = new THREE.DataArrayTexture(data, FACE_TEX_SIZE, FACE_TEX_SIZE, depth);
+      arrTex.format = THREE.RGBAFormat;
+      arrTex.type = THREE.UnsignedByteType;
+      arrTex.colorSpace = THREE.SRGBColorSpace;
+      arrTex.magFilter = THREE.LinearFilter;
+      arrTex.minFilter = THREE.LinearMipmapLinearFilter;
+      arrTex.generateMipmaps = true;
+      arrTex.wrapS = THREE.ClampToEdgeWrapping;
+      arrTex.wrapT = THREE.ClampToEdgeWrapping;
+      arrTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+      arrTex.needsUpdate = true;
+
+      const entry = { tex: arrTex, count: depth, names: faces.map((f) => f.name) };
+      arrayTexCache.set(cacheKey, entry);
+      return entry;
     }
 
     const host = document.getElementById("canvasHost");
@@ -395,6 +518,190 @@ HTML = r"""<!DOCTYPE html>
       return catalogItems.find((i) => i.id === cfg?.skuId) || null;
     }
 
+    function applyGpuTileShader(mat, uniforms) {
+      mat.onBeforeCompile = (shader) => {
+        Object.assign(shader.uniforms, uniforms);
+        mat.userData.shaderUniforms = shader.uniforms;
+
+        shader.vertexShader = shader.vertexShader
+          .replace(
+            "#include <common>",
+            `#include <common>
+             varying vec2 vTileSurfaceMeters;
+             uniform vec2 uSurfaceMeters;`
+          )
+          .replace(
+            "#include <uv_vertex>",
+            `#include <uv_vertex>
+             vTileSurfaceMeters = vMapUv * uSurfaceMeters;`
+          );
+
+        shader.fragmentShader = shader.fragmentShader
+          .replace(
+            "#include <common>",
+            `#include <common>
+             varying vec2 vTileSurfaceMeters;
+             uniform highp sampler2DArray uFaceTex;
+             uniform float uFaceCount;
+             uniform vec2 uTileSizeM;
+             uniform float uGroutM;
+             uniform float uStaggered;
+             uniform float uCycleFaces;
+             uniform float uRotateEnabled;
+             uniform float uRelief;
+             uniform vec3 uGroutColor;
+
+             float tileHash21(vec2 p) {
+               p = fract(p * vec2(123.34, 456.21));
+               p += dot(p, p + 45.32);
+               return fract(p.x * p.y);
+             }
+
+             vec2 rotateTileUv(vec2 uv, float turns) {
+               vec2 centered = uv - 0.5;
+               if (turns < 0.5) return uv;
+               if (turns < 1.5) return vec2(-centered.y, centered.x) + 0.5;
+               if (turns < 2.5) return vec2(-centered.x, -centered.y) + 0.5;
+               return vec2(centered.y, -centered.x) + 0.5;
+             }`
+          )
+          .replace(
+            "#include <map_fragment>",
+            `vec2 pitchM = max(uTileSizeM + vec2(uGroutM), vec2(0.05));
+             float rowIdx = floor(vTileSurfaceMeters.y / pitchM.y);
+             float staggerShift = (uStaggered > 0.5 && mod(abs(rowIdx), 2.0) > 0.5) ? pitchM.x * 0.5 : 0.0;
+             float shiftedX = vTileSurfaceMeters.x + staggerShift;
+             float colIdx = floor(shiftedX / pitchM.x);
+             vec2 cellId = vec2(colIdx, rowIdx);
+
+             vec2 localPosM = vec2(
+               shiftedX - colIdx * pitchM.x,
+               vTileSurfaceMeters.y - rowIdx * pitchM.y
+             );
+
+             float halfGrout = max(uGroutM * 0.5, 0.0);
+             float edgeDistX = min(localPosM.x, pitchM.x - localPosM.x);
+             float edgeDistY = min(localPosM.y, pitchM.y - localPosM.y);
+             float edgeDist = min(edgeDistX, edgeDistY);
+             float aaWidth = max(fwidth(edgeDist), 0.0005);
+             float groutMask = (uGroutM > 0.00001) ? (1.0 - smoothstep(max(halfGrout - aaWidth, 0.0), halfGrout + aaWidth, edgeDist)) : 0.0;
+
+             vec2 innerUv = clamp(
+               (localPosM - vec2(halfGrout)) / max(pitchM - vec2(uGroutM), vec2(0.01)),
+               vec2(0.002),
+               vec2(0.998)
+             );
+
+             float hFace = tileHash21(cellId + vec2(17.3, 9.1));
+             float hRot = tileHash21(cellId + vec2(53.7, 29.4));
+
+             float layerIdx = 0.0;
+             if (uCycleFaces > 0.5 && uFaceCount > 1.5) {
+               layerIdx = floor(hFace * uFaceCount);
+               layerIdx = clamp(layerIdx, 0.0, uFaceCount - 1.0);
+             }
+
+             float rotTurns = (uRotateEnabled > 0.5) ? floor(hRot * 4.0) : 0.0;
+             vec2 sampledUv = rotateTileUv(innerUv, rotTurns);
+
+             vec4 texSample = texture(uFaceTex, vec3(sampledUv, layerIdx));
+             vec3 tileLinear = texSample.rgb;
+             vec3 groutLinear = pow(uGroutColor, vec3(2.2));
+             vec3 finalAlbedo = mix(tileLinear, groutLinear, groutMask);
+
+             float luma = dot(tileLinear, vec3(0.299, 0.587, 0.114));
+             float grainDelta = (luma - 0.5) * 0.18 * uRelief;
+             finalAlbedo = clamp(finalAlbedo + vec3(grainDelta) * (1.0 - groutMask), 0.0, 1.0);
+
+             diffuseColor.rgb *= finalAlbedo;`
+          )
+          .replace(
+            "#include <roughnessmap_fragment>",
+            `#include <roughnessmap_fragment>
+             float lumaR = dot(vTileSurfaceMeters, vec2(1.0));
+             float edgeR = min(
+               min(mod(vTileSurfaceMeters.x + ((uStaggered > 0.5 && mod(abs(floor(vTileSurfaceMeters.y / max(uTileSizeM.y + uGroutM, 0.05))), 2.0) > 0.5) ? (uTileSizeM.x + uGroutM) * 0.5 : 0.0), max(uTileSizeM.x + uGroutM, 0.05)), (uTileSizeM.x + uGroutM) - mod(vTileSurfaceMeters.x + ((uStaggered > 0.5 && mod(abs(floor(vTileSurfaceMeters.y / max(uTileSizeM.y + uGroutM, 0.05))), 2.0) > 0.5) ? (uTileSizeM.x + uGroutM) * 0.5 : 0.0), max(uTileSizeM.x + uGroutM, 0.05))),
+               min(mod(vTileSurfaceMeters.y, max(uTileSizeM.y + uGroutM, 0.05)), (uTileSizeM.y + uGroutM) - mod(vTileSurfaceMeters.y, max(uTileSizeM.y + uGroutM, 0.05)))
+             );
+             float gMaskR = (uGroutM > 0.00001) ? (1.0 - smoothstep(max(uGroutM * 0.5 - 0.001, 0.0), uGroutM * 0.5 + 0.001, edgeR)) : 0.0;
+             roughnessFactor = mix(roughnessFactor, 0.92, gMaskR);
+             float unusedVar = lumaR;`
+          );
+      };
+      mat.customProgramCacheKey = () => "simpolo-gpu-tile-shader-v1";
+    }
+
+    function updateFaceBadge() {
+      const target = document.getElementById("surfaceSelect").value;
+      const sku = getSurfaceSku(target);
+      if (!sku) return;
+      const cycle = document.getElementById("toggleCycleFaces").checked;
+      const rot = document.getElementById("toggleTileRotate").checked;
+      const faces = getSiblingFaces(sku).map((f) => f.name);
+      document.getElementById("faceInfo").textContent =
+        `Shader faces (${faces.length}): ${faces.slice(0, 4).join(", ")}${faces.length > 4 ? "…" : ""} • Cycle: ${cycle ? "ON" : "OFF"} • Rot: ${rot ? "ON" : "OFF"}`;
+    }
+
+    function syncShaderUniformsOnly() {
+      const cycle = document.getElementById("toggleCycleFaces").checked ? 1.0 : 0.0;
+      const rot = document.getElementById("toggleTileRotate").checked ? 1.0 : 0.0;
+      const relief = numInput("reliefSlider", 1.0, 0, 2.5);
+      document.getElementById("reliefVal").textContent = relief.toFixed(2);
+
+      Object.keys(surfaceState).forEach((k) => {
+        const cfg = surfaceState[k];
+        const u = cfg.mesh.material?.userData?.shaderUniforms;
+        if (!u) return;
+        u.uSurfaceMeters.value.set(cfg.widthM, cfg.heightM);
+        u.uGroutM.value = cfg.groutMm / 1000;
+        u.uStaggered.value = cfg.pattern === "staggered" ? 1.0 : 0.0;
+        u.uGroutColor.value.set(cfg.groutHex);
+        u.uCycleFaces.value = cycle;
+        u.uRotateEnabled.value = rot;
+        u.uRelief.value = relief;
+      });
+      updateFaceBadge();
+    }
+
+    async function renderSurfaceMaterial(surfKey) {
+      const cfg = surfaceState[surfKey];
+      const sku = getSurfaceSku(surfKey);
+      if (!sku) return;
+
+      const spec = readTileSpec(sku);
+      const tileW_m = (spec.widthMm || 600) / 1000;
+      const tileH_m = (spec.heightMm || 1200) / 1000;
+      const arrEntry = await getSiblingArrayTexture(sku);
+      const pbr = sku.pbr || {};
+
+      const mat = new THREE.MeshPhysicalMaterial({
+        color: new THREE.Color("#ffffff"),
+        roughness: pbr.roughness ?? 0.28,
+        metalness: pbr.metalness ?? 0.02,
+        clearcoat: pbr.clearcoat ?? 0.25,
+        clearcoatRoughness: pbr.clearcoatRoughness ?? 0.16,
+      });
+
+      const uniforms = {
+        uFaceTex: { value: arrEntry.tex },
+        uFaceCount: { value: arrEntry.count },
+        uSurfaceMeters: { value: new THREE.Vector2(cfg.widthM, cfg.heightM) },
+        uTileSizeM: { value: new THREE.Vector2(tileW_m, tileH_m) },
+        uGroutM: { value: cfg.groutMm / 1000 },
+        uStaggered: { value: cfg.pattern === "staggered" ? 1.0 : 0.0 },
+        uCycleFaces: { value: document.getElementById("toggleCycleFaces").checked ? 1.0 : 0.0 },
+        uRotateEnabled: { value: document.getElementById("toggleTileRotate").checked ? 1.0 : 0.0 },
+        uRelief: { value: numInput("reliefSlider", 1.0, 0, 2.5) },
+        uGroutColor: { value: new THREE.Color(cfg.groutHex) },
+      };
+
+      applyGpuTileShader(mat, uniforms);
+
+      if (cfg.mesh.material?.dispose) cfg.mesh.material.dispose();
+      cfg.mesh.material = mat;
+      updateFaceBadge();
+    }
+
     function rebuildRoomGeometry() {
       const w = numInput("roomW", 5.0, 2, 20, true);
       const d = numInput("roomD", 4.0, 2, 20, true);
@@ -416,100 +723,6 @@ HTML = r"""<!DOCTYPE html>
 
       Object.keys(surfaceState).forEach((k) => renderSurfaceMaterial(k));
       updateBoqSummary();
-    }
-
-    function buildTiledCanvasTextures(img, sku, cfg) {
-      const spec = readTileSpec(sku);
-      const tileW = spec.widthMm || 600;
-      const tileH = spec.heightMm || 1200;
-      const groutMm = Math.max(0, cfg.groutMm);
-      const unitW = tileW + groutMm;
-      const unitH = tileH + groutMm;
-      const isStaggered = cfg.pattern === "staggered";
-      const rows = isStaggered ? 2 : 1;
-      const cellPx = 512;
-      const cw = cellPx;
-      const ch = Math.max(128, Math.round(cellPx * (unitH / unitW) * rows));
-
-      const albedoCanvas = document.createElement("canvas");
-      albedoCanvas.width = cw; albedoCanvas.height = ch;
-      const ctx = albedoCanvas.getContext("2d");
-
-      const bumpCanvas = document.createElement("canvas");
-      bumpCanvas.width = cw; bumpCanvas.height = ch;
-      const bctx = bumpCanvas.getContext("2d");
-
-      ctx.fillStyle = cfg.groutHex || "#e2dfd9";
-      ctx.fillRect(0, 0, cw, ch);
-      bctx.fillStyle = "#181818";
-      bctx.fillRect(0, 0, cw, ch);
-
-      const gx = (groutMm / unitW) * cellPx;
-      const gy = (groutMm / (unitH * rows)) * ch;
-      const drawW = cellPx - gx;
-      const drawH = (ch / rows) - gy;
-
-      for (let r = 0; r < rows; r++) {
-        const y = r * (ch / rows) + gy / 2;
-        const shiftX = isStaggered && r === 1 ? cellPx * 0.5 : 0;
-        [-cellPx, 0, cellPx].forEach((offset) => {
-          const x = offset + shiftX + gx / 2;
-          if (x + drawW < 0 || x > cw) return;
-          ctx.drawImage(img, x, y, drawW, drawH);
-          bctx.fillStyle = "#e8e8e8";
-          bctx.fillRect(x, y, drawW, drawH);
-        });
-      }
-
-      const mapTex = new THREE.CanvasTexture(albedoCanvas);
-      mapTex.colorSpace = THREE.SRGBColorSpace;
-      mapTex.wrapS = mapTex.wrapT = THREE.RepeatWrapping;
-
-      const bumpTex = new THREE.CanvasTexture(bumpCanvas);
-      bumpTex.wrapS = bumpTex.wrapT = THREE.RepeatWrapping;
-
-      const repeatX = Math.max(0.25, cfg.widthM / (unitW / 1000));
-      const repeatY = Math.max(0.25, cfg.heightM / ((unitH * rows) / 1000));
-      mapTex.repeat.set(repeatX, repeatY);
-      bumpTex.repeat.set(repeatX, repeatY);
-
-      const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-      mapTex.anisotropy = bumpTex.anisotropy = aniso;
-      return { mapTex, bumpTex };
-    }
-
-    function renderSurfaceMaterial(surfKey) {
-      const cfg = surfaceState[surfKey];
-      const sku = getSurfaceSku(surfKey);
-      if (!sku) return;
-
-      const pbr = sku.pbr || {};
-      const mat = new THREE.MeshPhysicalMaterial({
-        color: new THREE.Color(pbr.baseHex || "#ffffff"),
-        roughness: pbr.roughness ?? 0.25,
-        metalness: pbr.metalness ?? 0.0,
-        clearcoat: pbr.clearcoat ?? 0.0,
-        clearcoatRoughness: pbr.clearcoatRoughness ?? 0.15,
-        bumpScale: Math.max(pbr.bumpScale ?? 0.003, cfg.groutMm > 0 ? 0.006 : 0.002)
-      });
-
-      const albedoPath = pbr.maps?.albedo;
-      if (albedoPath) {
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.onload = () => {
-          const { mapTex, bumpTex } = buildTiledCanvasTextures(img, sku, cfg);
-          mat.map = mapTex;
-          mat.bumpMap = bumpTex;
-          mat.needsUpdate = true;
-        };
-        img.src = albedoPath;
-      }
-
-      if (cfg.mesh.material?.map) cfg.mesh.material.map.dispose();
-      if (cfg.mesh.material?.bumpMap) cfg.mesh.material.bumpMap.dispose();
-      if (cfg.mesh.material?.dispose) cfg.mesh.material.dispose();
-      cfg.mesh.material = mat;
     }
 
     function currentBOQ() {
@@ -571,7 +784,7 @@ HTML = r"""<!DOCTYPE html>
       </div>`;
 
       html += `<div class="boq-total">
-        <div class="boq-row"><span>Gross (${totals.effectiveWastePct}% eff. waste):</span><span>${totals.grossSqM.toFixed(1)} m²</span></div>
+        <div class="boq-row"><span>Gross (${totals.effectiveWastePct}% eff. waste):</span><span>${totals.grossSqM.toFixed(1)} m&sup2;</span></div>
         <div class="boq-row"><span>Est. Material (excl. GST):</span><span>₹${(totals.amount || 0).toLocaleString("en-IN")}</span></div>
       </div>`;
 
@@ -713,9 +926,10 @@ HTML = r"""<!DOCTYPE html>
       patternSelect.value = cfg.pattern;
       groutMmInput.value = cfg.groutMm;
       groutColorInput.value = cfg.groutHex;
+      updateFaceBadge();
     }
 
-    function applyControlChangeToActiveSurface() {
+    async function applyControlChangeToActiveSurface() {
       const key = surfaceSelect.value;
       const cfg = surfaceState[key];
       if (!cfg) return;
@@ -723,14 +937,16 @@ HTML = r"""<!DOCTYPE html>
       cfg.pattern = patternSelect.value;
       cfg.groutMm = numInput("groutMm", 2.0, 0, 15, true);
       cfg.groutHex = groutColorInput.value;
-      renderSurfaceMaterial(key);
+      await renderSurfaceMaterial(key);
       updateBoqSummary();
     }
 
     fetch("full_catalog.json")
       .then((r) => r.json())
-      .then((data) => {
+      .then(async (data) => {
         catalogItems = data.items || [];
+        rebuildSiblingIndex(catalogItems);
+
         skuSelect.innerHTML = catalogItems.slice(0, 200)
           .map((item) => `<option value="${item.id}">${item.series} — ${item.name}</option>`)
           .join("");
@@ -771,9 +987,23 @@ HTML = r"""<!DOCTYPE html>
 
     surfaceSelect.addEventListener("change", syncControlsFromActiveSurface);
     skuSelect.addEventListener("change", applyControlChangeToActiveSurface);
-    patternSelect.addEventListener("change", applyControlChangeToActiveSurface);
-    groutMmInput.addEventListener("input", applyControlChangeToActiveSurface);
-    groutColorInput.addEventListener("input", applyControlChangeToActiveSurface);
+    patternSelect.addEventListener("change", async () => {
+      await applyControlChangeToActiveSurface();
+      syncShaderUniformsOnly();
+    });
+    groutMmInput.addEventListener("input", async () => {
+      await applyControlChangeToActiveSurface();
+      syncShaderUniformsOnly();
+    });
+    groutColorInput.addEventListener("input", async () => {
+      await applyControlChangeToActiveSurface();
+      syncShaderUniformsOnly();
+    });
+    ["toggleCycleFaces", "toggleTileRotate"].forEach((id) => {
+      document.getElementById(id).addEventListener("change", syncShaderUniformsOnly);
+    });
+    document.getElementById("reliefSlider").addEventListener("input", syncShaderUniformsOnly);
+
     ["roomW", "roomD", "roomH"].forEach((id) => document.getElementById(id).addEventListener("input", rebuildRoomGeometry));
     ["wastagePct", "openBack", "openSide"].forEach((id) => document.getElementById(id).addEventListener("input", updateBoqSummary));
     document.getElementById("toggleSkirting").addEventListener("change", updateBoqSummary);
