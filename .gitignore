@@ -1,0 +1,13 @@
+# Heavy image assets & backups
+web_prototype/web_assets/
+web_prototype/full_catalog.unfiltered_backup.json
+web_prototype/excluded_furniture_lifestyle.json
+*.zip
+*.rar
+*.7z
+
+# Python & OS caches
+__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db

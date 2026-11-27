@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simpolo — Full Catalog &amp; 3D Space Visualizer</title>
+  <style>
+    :root {
+      --bg: #f6f5f2;
+      --surface: #ffffff;
+      --ink: #18181b;
+      --muted: #52525b;
+      --line: #e4e2dc;
+      --accent: #9a5b13;
+      --accent-dark: #78440b;
+      --dark-panel: #18191c;
+    }
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--bg); color: var(--ink); }
+
+    header {
+      position: sticky; top: 0; z-index: 40;
+      background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--line);
+    }
+    .nav-wrap {
+      max-width: 1280px; margin: 0 auto; padding: 12px 20px;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    }
+    .brand { display: flex; align-items: baseline; gap: 10px; text-decoration: none; color: var(--ink); }
+    .brand-name { font-size: 22px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; }
+    .brand-sub { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+    nav { display: flex; gap: 18px; flex-wrap: wrap; }
+    nav a {
+      text-decoration: none; color: var(--ink); font-size: 13px; font-weight: 500;
+      padding: 6px 2px; border-bottom: 2px solid transparent;
+    }
+    nav a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+    .cta-btn {
+      background: var(--accent); color: #fff; border: none; border-radius: 6px;
+      padding: 8px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer; text-decoration: none;
+    }
+    .cta-btn:hover { background: var(--accent-dark); }
+
+    .hero {
+      position: relative; background: #1c1d21; color: #fff; overflow: hidden;
+      min-height: 320px; display: flex; align-items: center;
+    }
+    .hero-bg {
+      position: absolute; inset: 0; background-size: cover; background-position: center;
+      opacity: 0.32; transition: background-image 0.3s ease;
+    }
+    .hero-inner {
+      position: relative; z-index: 2; max-width: 1280px; width: 100%;
+      margin: 0 auto; padding: 40px 20px;
+    }
+    .eyebrow { font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #f59e0b; font-weight: 700; }
+    .hero h1 { font-size: clamp(26px, 3.8vw, 40px); line-height: 1.15; margin: 8px 0 10px; max-width: 720px; }
+    .hero p { color: #e4e4e7; max-width: 620px; margin: 0 0 16px; font-size: 14px; line-height: 1.55; }
+    .hero-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pill-btn {
+      background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 999px; padding: 6px 12px; font-size: 12px; cursor: pointer;
+    }
+    .pill-btn.active, .pill-btn:hover { background: var(--accent); border-color: var(--accent); }
+
+    .section { max-width: 1280px; margin: 0 auto; padding: 36px 20px; }
+    .sec-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .sec-head h2 { margin: 0; font-size: 22px; font-weight: 700; }
+    .sec-head span { font-size: 13px; color: var(--muted); }
+
+    .toolbar {
+      display: grid; grid-template-columns: 1fr 220px 220px; gap: 10px; margin-bottom: 14px;
+    }
+    @media (max-width: 780px) { .toolbar { grid-template-columns: 1fr; } }
+    .toolbar input, .toolbar select {
+      padding: 8px 10px; border-radius: 6px; border: 1px solid #d4d4d8;
+      background: var(--surface); color: var(--ink); font-size: 13px; width: 100%;
+    }
+
+    .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+    .tab-btn {
+      background: var(--surface); color: var(--ink); border: 1px solid var(--line);
+      border-radius: 999px; padding: 6px 13px; font-size: 12px; font-weight: 500; cursor: pointer;
+    }
+    .tab-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; }
+    .card {
+      background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+      overflow: hidden; display: flex; flex-direction: column; transition: transform 0.14s ease, box-shadow 0.14s ease;
+    }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.06); }
+    .card-thumb { width: 100%; height: 140px; object-fit: cover; background: #e7e5e4; }
+    .card-body { padding: 11px 13px; flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+    .card-series { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); font-weight: 700; }
+    .card-title { font-size: 13.5px; font-weight: 700; margin: 3px 0; word-break: break-word; }
+    .card-meta { font-size: 11.5px; color: var(--muted); margin-bottom: 9px; }
+    .card-btn {
+      width: 100%; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--ink);
+      background: transparent; color: var(--ink); font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .card-btn:hover { background: var(--ink); color: #fff; }
+
+    .load-more-wrap { display: flex; justify-content: center; margin-top: 20px; }
+    .load-more-btn {
+      padding: 9px 22px; border-radius: 8px; border: 1px solid var(--ink);
+      background: var(--surface); color: var(--ink); font-weight: 600; font-size: 13px; cursor: pointer;
+    }
+    .load-more-btn:hover { background: var(--ink); color: #fff; }
+
+    .studio-band { background: #efede8; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    .studio-grid { display: grid; grid-template-columns: 345px 1fr; gap: 20px; align-items: start; }
+    @media (max-width: 920px) { .studio-grid { grid-template-columns: 1fr; } }
+
+    .controls-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+    .controls-card h3 { margin: 14px 0 6px; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
+    .controls-card h3:first-child { margin-top: 0; border-top: none; padding-top: 0; }
+    label { display: block; font-size: 12px; color: var(--ink); font-weight: 500; margin-top: 7px; margin-bottom: 3px; }
+    select, input[type="number"], input[type="range"] { width: 100%; }
+    select, input[type="number"] {
+      padding: 6px 8px; border-radius: 6px; border: 1px solid #d4d4d8;
+      background: #fff; color: var(--ink); font-size: 12.5px;
+    }
+    input[type="color"] { width: 100%; height: 30px; border: 1px solid #d4d4d8; border-radius: 6px; padding: 2px; background: #fff; }
+    .g-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .g-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+
+    .viewer-wrap {
+      background: var(--dark-panel); border-radius: 10px; overflow: hidden;
+      border: 1px solid #27272a; min-height: 540px; position: relative;
+    }
+    #canvasHost { width: 100%; height: 540px; }
+    .viewer-hint {
+      position: absolute; bottom: 12px; left: 12px;
+      background: rgba(15, 23, 42, 0.78); color: #e2e8f0;
+      font-size: 11.5px; padding: 6px 10px; border-radius: 6px; pointer-events: none;
+    }
+
+    .boq-panel { margin-top: 10px; background: #faf9f6; border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 12px; }
+    .boq-row { display: flex; justify-content: space-between; gap: 8px; line-height: 1.5; }
+    .boq-line { padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px dashed var(--line); }
+    .boq-total { margin-top: 6px; padding-top: 6px; border-top: 1px solid #d4d4d8; font-weight: 700; color: var(--accent-dark); }
+    .copy-btn {
+      margin-top: 10px; width: 100%; padding: 8px; border-radius: 6px; border: none;
+      background: var(--accent); color: #fff; font-weight: 600; font-size: 12.5px; cursor: pointer;
+    }
+    .copy-btn:hover { background: var(--accent-dark); }
+
+    footer { background: #18181b; color: #d4d4d8; padding: 28px 20px; }
+    .foot-wrap { max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; font-size: 12.5px; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <header>
+    <div class="nav-wrap">
+      <a class="brand" href="#">
+        <span class="brand-name">Simpolo</span>
+        <span class="brand-sub">Full Catalog &amp; 3D Studio</span>
+      </a>
+      <nav>
+        <a href="#collections">Catalog</a>
+        <a href="#visualizer">3D Visualizer</a>
+        <a href="#boq">BOQ Estimator</a>
+      </nav>
+      <a class="cta-btn" href="#visualizer">Open 3D Room</a>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="hero-bg" id="heroBg"></div>
+    <div class="hero-inner">
+      <div class="eyebrow">Simpolo Surface Library</div>
+      <h1 id="heroTitle">Explore Every Series in 3D</h1>
+      <p id="heroDesc">Search and filter across your full Simpolo catalog in web_assets, test staggered or grid laying patterns with custom grout lines, and generate a piece-count BOQ.</p>
+      <div class="hero-pills" id="heroSeriesPills"></div>
+    </div>
+  </section>
+
+  <section class="section" id="collections">
+    <div class="sec-head">
+      <h2>Simpolo Catalog</h2>
+      <span id="catalogCount">Loading full_catalog.json...</span>
+    </div>
+
+    <div class="toolbar">
+      <input id="searchInput" type="search" placeholder="Search SKU name, series, size (e.g. 600x1200)..." />
+      <select id="seriesFilter"><option value="All">All Series</option></select>
+      <select id="sizeFilter"><option value="All">All Sizes</option></select>
+    </div>
+
+    <div class="filter-bar" id="lookTabs"></div>
+    <div class="cards" id="skuCards"></div>
+    <div class="load-more-wrap">
+      <button class="load-more-btn" id="loadMoreBtn" style="display:none;">Load More SKUs</button>
+    </div>
+  </section>
+
+  <div class="studio-band" id="visualizer">
+    <section class="section">
+      <div class="sec-head">
+        <h2>3D Room Visualizer &amp; BOQ</h2>
+        <span>Apply any catalog SKU to Floor, Feature Wall, or Side Wall</span>
+      </div>
+
+      <div class="studio-grid">
+        <div class="controls-card">
+          <h3>Room Dimensions (m)</h3>
+          <div class="g-3">
+            <div><label for="roomW">Width</label><input id="roomW" type="number" min="2" max="20" step="0.1" value="5.0" /></div>
+            <div><label for="roomD">Depth</label><input id="roomD" type="number" min="2" max="20" step="0.1" value="4.0" /></div>
+            <div><label for="roomH">Height</label><input id="roomH" type="number" min="2.2" max="6" step="0.1" value="3.0" /></div>
+          </div>
+
+          <h3>Surface &amp; SKU</h3>
+          <label for="surfaceSelect">Target Surface</label>
+          <select id="surfaceSelect">
+            <option value="floor">Floor</option>
+            <option value="backWall">Feature Wall (Back)</option>
+            <option value="sideWall">Side Wall (Left)</option>
+          </select>
+
+          <label for="skuSelect">Active Surface SKU</label>
+          <select id="skuSelect"></select>
+
+          <h3>Pattern &amp; Grout</h3>
+          <div class="g-2">
+            <div>
+              <label for="patternSelect">Layout</label>
+              <select id="patternSelect">
+                <option value="grid">Straight Grid</option>
+                <option value="staggered">Staggered (50%)</option>
+              </select>
+            </div>
+            <div>
+              <label for="groutMm">Grout (mm)</label>
+              <input id="groutMm" type="number" min="0" max="15" step="0.5" value="2.0" />
+            </div>
+          </div>
+
+          <div class="g-2">
+            <div><label for="groutColor">Grout Tone</label><input id="groutColor" type="color" value="#e2dfd9" /></div>
+            <div><label for="wastagePct">Wastage (%)</label><input id="wastagePct" type="number" min="0" max="30" step="1" value="10" /></div>
+          </div>
+
+          <label for="lightSlider">Daylight Intensity: <span id="lightVal">1.35</span></label>
+          <input id="lightSlider" type="range" min="0.4" max="2.5" step="0.05" value="1.35" />
+
+          <h3 id="boq">BOQ Estimate (INR)</h3>
+          <div class="boq-panel" id="boqSummary">Loading BOQ...</div>
+          <button class="copy-btn" id="exportBoqBtn">Copy BOQ Summary</button>
+        </div>
+
+        <div class="viewer-wrap">
+          <div id="canvasHost"></div>
+          <div class="viewer-hint">Left-drag: Orbit &bull; Right-drag: Pan &bull; Scroll: Zoom</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <div class="foot-wrap">
+      <div><strong>SIMPOLO</strong> &mdash; Full Catalog 3D Visualizer</div>
+      <div>Serving local textures from <code>web_assets/</code></div>
+    </div>
+  </footer>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+    const PAGE_SIZE = 48;
+    let catalogItems = [];
+    let filteredItems = [];
+    let visibleCount = PAGE_SIZE;
+    let activeLook = "All";
+
+    const host = document.getElementById("canvasHost");
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color("#232730");
+
+    const camera = new THREE.PerspectiveCamera(48, host.clientWidth / host.clientHeight, 0.1, 100);
+    camera.position.set(0.6, 2.3, 5.6);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(host.clientWidth, host.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    host.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 1.1, 0);
+    controls.enableDamping = true;
+
+    scene.add(new THREE.HemisphereLight("#ffffff", "#64748b", 0.75));
+    const dirLight = new THREE.DirectionalLight("#fff7ed", 1.35);
+    dirLight.position.set(3.5, 6.0, 4.5);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(1024, 1024);
+    scene.add(dirLight);
+
+    const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(5, 4), new THREE.MeshStandardMaterial({ color: "#d6d3cd" }));
+    floorMesh.rotation.x = -Math.PI / 2;
+    floorMesh.receiveShadow = true;
+    scene.add(floorMesh);
+
+    const backWallMesh = new THREE.Mesh(new THREE.PlaneGeometry(5, 3), new THREE.MeshStandardMaterial({ color: "#e5e7eb" }));
+    backWallMesh.receiveShadow = true;
+    scene.add(backWallMesh);
+
+    const sideWallMesh = new THREE.Mesh(new THREE.PlaneGeometry(4, 3), new THREE.MeshStandardMaterial({ color: "#cbd5e1" }));
+    sideWallMesh.rotation.y = Math.PI / 2;
+    sideWallMesh.receiveShadow = true;
+    scene.add(sideWallMesh);
+
+    const surfaceState = {
+      floor: { label: "Floor", mesh: floorMesh, widthM: 5.0, heightM: 4.0, skuId: null, pattern: "grid", groutMm: 2.0, groutHex: "#e2dfd9" },
+      backWall: { label: "Feature Wall", mesh: backWallMesh, widthM: 5.0, heightM: 3.0, skuId: null, pattern: "grid", groutMm: 2.0, groutHex: "#e2dfd9" },
+      sideWall: { label: "Side Wall", mesh: sideWallMesh, widthM: 4.0, heightM: 3.0, skuId: null, pattern: "grid", groutMm: 2.0, groutHex: "#e2dfd9" }
+    };
+
+    function rebuildRoomGeometry() {
+      const w = Math.max(2, parseFloat(document.getElementById("roomW").value) || 5.0);
+      const d = Math.max(2, parseFloat(document.getElementById("roomD").value) || 4.0);
+      const h = Math.max(2.2, parseFloat(document.getElementById("roomH").value) || 3.0);
+
+      surfaceState.floor.widthM = w; surfaceState.floor.heightM = d;
+      floorMesh.geometry.dispose();
+      floorMesh.geometry = new THREE.PlaneGeometry(w, d);
+
+      surfaceState.backWall.widthM = w; surfaceState.backWall.heightM = h;
+      backWallMesh.geometry.dispose();
+      backWallMesh.geometry = new THREE.PlaneGeometry(w, h);
+      backWallMesh.position.set(0, h / 2, -d / 2);
+
+      surfaceState.sideWall.widthM = d; surfaceState.sideWall.heightM = h;
+      sideWallMesh.geometry.dispose();
+      sideWallMesh.geometry = new THREE.PlaneGeometry(d, h);
+      sideWallMesh.position.set(-w / 2, h / 2, 0);
+
+      Object.keys(surfaceState).forEach((k) => renderSurfaceMaterial(k));
+      updateBoqSummary();
+    }
+
+    function buildTiledCanvasTextures(img, sku, cfg) {
+      const tileW = sku.dimensionsMm?.width || 600;
+      const tileH = sku.dimensionsMm?.height || 1200;
+      const groutMm = Math.max(0, cfg.groutMm);
+      const unitW = tileW + groutMm;
+      const unitH = tileH + groutMm;
+      const isStaggered = cfg.pattern === "staggered";
+      const rows = isStaggered ? 2 : 1;
+      const cellPx = 512;
+      const cw = cellPx;
+      const ch = Math.max(128, Math.round(cellPx * (unitH / unitW) * rows));
+
+      const albedoCanvas = document.createElement("canvas");
+      albedoCanvas.width = cw; albedoCanvas.height = ch;
+      const ctx = albedoCanvas.getContext("2d");
+
+      const bumpCanvas = document.createElement("canvas");
+      bumpCanvas.width = cw; bumpCanvas.height = ch;
+      const bctx = bumpCanvas.getContext("2d");
+
+      ctx.fillStyle = cfg.groutHex || "#e2dfd9";
+      ctx.fillRect(0, 0, cw, ch);
+      bctx.fillStyle = "#181818";
+      bctx.fillRect(0, 0, cw, ch);
+
+      const gx = (groutMm / unitW) * cellPx;
+      const gy = (groutMm / (unitH * rows)) * ch;
+      const drawW = cellPx - gx;
+      const drawH = (ch / rows) - gy;
+
+      for (let r = 0; r < rows; r++) {
+        const y = r * (ch / rows) + gy / 2;
+        const shiftX = isStaggered && r === 1 ? cellPx * 0.5 : 0;
+        [-cellPx, 0, cellPx].forEach((offset) => {
+          const x = offset + shiftX + gx / 2;
+          if (x + drawW < 0 || x > cw) return;
+          ctx.drawImage(img, x, y, drawW, drawH);
+          bctx.fillStyle = "#e8e8e8";
+          bctx.fillRect(x, y, drawW, drawH);
+        });
+      }
+
+      const mapTex = new THREE.CanvasTexture(albedoCanvas);
+      mapTex.colorSpace = THREE.SRGBColorSpace;
+      mapTex.wrapS = mapTex.wrapT = THREE.RepeatWrapping;
+
+      const bumpTex = new THREE.CanvasTexture(bumpCanvas);
+      bumpTex.wrapS = bumpTex.wrapT = THREE.RepeatWrapping;
+
+      const repeatX = Math.max(0.25, cfg.widthM / (unitW / 1000));
+      const repeatY = Math.max(0.25, cfg.heightM / ((unitH * rows) / 1000));
+      mapTex.repeat.set(repeatX, repeatY);
+      bumpTex.repeat.set(repeatX, repeatY);
+
+      const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+      mapTex.anisotropy = bumpTex.anisotropy = aniso;
+      return { mapTex, bumpTex };
+    }
+
+    function renderSurfaceMaterial(surfKey) {
+      const cfg = surfaceState[surfKey];
+      const sku = catalogItems.find((i) => i.id === cfg.skuId);
+      if (!sku) return;
+
+      const pbr = sku.pbr || {};
+      const mat = new THREE.MeshPhysicalMaterial({
+        color: new THREE.Color(pbr.baseHex || "#ffffff"),
+        roughness: pbr.roughness ?? 0.25,
+        metalness: pbr.metalness ?? 0.0,
+        clearcoat: pbr.clearcoat ?? 0.0,
+        clearcoatRoughness: pbr.clearcoatRoughness ?? 0.15,
+        bumpScale: Math.max(pbr.bumpScale ?? 0.003, cfg.groutMm > 0 ? 0.006 : 0.002)
+      });
+
+      const albedoPath = pbr.maps?.albedo;
+      if (albedoPath) {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          const { mapTex, bumpTex } = buildTiledCanvasTextures(img, sku, cfg);
+          mat.map = mapTex;
+          mat.bumpMap = bumpTex;
+          mat.needsUpdate = true;
+        };
+        img.src = albedoPath;
+      }
+
+      if (cfg.mesh.material?.map) cfg.mesh.material.map.dispose();
+      if (cfg.mesh.material?.bumpMap) cfg.mesh.material.bumpMap.dispose();
+      if (cfg.mesh.material?.dispose) cfg.mesh.material.dispose();
+      cfg.mesh.material = mat;
+    }
+
+    function updateBoqSummary() {
+      const wastagePct = Math.max(0, parseFloat(document.getElementById("wastagePct").value) || 0);
+      const factor = 1 + wastagePct / 100;
+      const boqEl = document.getElementById("boqSummary");
+
+      let grandSqFt = 0, grandCost = 0, html = "";
+      Object.values(surfaceState).forEach((surf) => {
+        const sku = catalogItems.find((i) => i.id === surf.skuId);
+        if (!sku) return;
+        const w = sku.dimensionsMm?.width || 600;
+        const h = sku.dimensionsMm?.height || 1200;
+        const grossSqFt = surf.widthM * surf.heightM * 10.7639 * factor;
+        const tileSqFt = ((w * h) / 92903.04) || 1;
+        const pieces = Math.ceil(grossSqFt / tileSqFt);
+        const rate = sku.pricing?.ratePerSqFt || 95;
+        const estCost = grossSqFt * rate;
+        grandSqFt += grossSqFt; grandCost += estCost;
+
+        html += `<div class="boq-line">
+          <div class="boq-row"><strong>${surf.label}:</strong><span>${sku.series} (${w}x${h}mm)</span></div>
+          <div class="boq-row"><span>${surf.pattern} &bull; ${surf.groutMm}mm</span><span>${grossSqFt.toFixed(1)} sq.ft (${pieces} pcs)</span></div>
+          <div class="boq-row"><span>@ ₹${rate}/sq.ft:</span><span>₹${Math.round(estCost).toLocaleString("en-IN")}</span></div>
+        </div>`;
+      });
+
+      html += `<div class="boq-total">
+        <div class="boq-row"><span>Total (+${wastagePct}% waste):</span><span>${grandSqFt.toFixed(1)} sq.ft</span></div>
+        <div class="boq-row"><span>Est. Material (excl. GST):</span><span>₹${Math.round(grandCost).toLocaleString("en-IN")}</span></div>
+      </div>`;
+      boqEl.innerHTML = html;
+    }
+
+    function ensureSkuInDropdown(sku) {
+      const sel = document.getElementById("skuSelect");
+      if (![...sel.options].some((o) => o.value === sku.id)) {
+        const opt = document.createElement("option");
+        opt.value = sku.id;
+        opt.textContent = `${sku.series} — ${sku.name}`;
+        sel.appendChild(opt);
+      }
+    }
+
+    function applyFilterAndRender(resetCount = true) {
+      if (resetCount) visibleCount = PAGE_SIZE;
+      const q = document.getElementById("searchInput").value.trim().toLowerCase();
+      const sVal = document.getElementById("seriesFilter").value;
+      const szVal = document.getElementById("sizeFilter").value;
+
+      filteredItems = catalogItems.filter((item) => {
+        if (activeLook !== "All" && item.lookAndFeel !== activeLook) return false;
+        if (sVal !== "All" && item.series !== sVal) return false;
+        const sizeStr = `${item.dimensionsMm?.width || 600}x${item.dimensionsMm?.height || 1200}`;
+        if (szVal !== "All" && sizeStr !== szVal) return false;
+        if (q) {
+          const hay = `${item.name || ""} ${item.series || ""} ${item.finish || ""} ${sizeStr}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+
+      document.getElementById("catalogCount").textContent =
+        `Showing ${Math.min(visibleCount, filteredItems.length)} of ${filteredItems.length} matching (${catalogItems.length} total)`;
+
+      const slice = filteredItems.slice(0, visibleCount);
+      document.getElementById("skuCards").innerHTML = slice.map((item) => {
+        const w = item.dimensionsMm?.width || 600;
+        const h = item.dimensionsMm?.height || 1200;
+        return `<div class="card">
+          <img class="card-thumb" src="${item.pbr?.maps?.albedo || ""}" alt="${item.name}" loading="lazy" />
+          <div class="card-body">
+            <div>
+              <div class="card-series">${item.series}</div>
+              <div class="card-title">${item.name}</div>
+              <div class="card-meta">${w}x${h}mm &bull; ₹${item.pricing?.ratePerSqFt || 95}/sq.ft</div>
+            </div>
+            <button class="card-btn" data-apply-sku="${item.id}">Apply in 3D Room</button>
+          </div>
+        </div>`;
+      }).join("");
+
+      document.querySelectorAll("[data-apply-sku]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const sku = catalogItems.find((i) => i.id === btn.dataset.applySku);
+          if (!sku) return;
+          ensureSkuInDropdown(sku);
+          document.getElementById("skuSelect").value = sku.id;
+          applyControlChangeToActiveSurface();
+          document.getElementById("visualizer").scrollIntoView({ behavior: "smooth" });
+        });
+      });
+
+      const moreBtn = document.getElementById("loadMoreBtn");
+      moreBtn.style.display = visibleCount < filteredItems.length ? "inline-block" : "none";
+      moreBtn.textContent = `Load More (${filteredItems.length - visibleCount} remaining)`;
+    }
+
+    function populateFiltersAndHero() {
+      const seriesList = [...new Set(catalogItems.map((i) => i.series).filter(Boolean))].sort();
+      const sizeList = [...new Set(catalogItems.map((i) => `${i.dimensionsMm?.width || 600}x${i.dimensionsMm?.height || 1200}`))].sort();
+      const lookList = ["All", ...new Set(catalogItems.map((i) => i.lookAndFeel).filter(Boolean))];
+
+      document.getElementById("seriesFilter").innerHTML =
+        `<option value="All">All Series (${seriesList.length})</option>` +
+        seriesList.map((s) => `<option value="${s}">${s}</option>`).join("");
+
+      document.getElementById("sizeFilter").innerHTML =
+        `<option value="All">All Sizes</option>` +
+        sizeList.map((sz) => `<option value="${sz}">${sz} mm</option>`).join("");
+
+      document.getElementById("lookTabs").innerHTML = lookList.map((lk) =>
+        `<button class="tab-btn ${lk === activeLook ? "active" : ""}" data-look="${lk}">${lk}</button>`
+      ).join("");
+
+      document.querySelectorAll("#lookTabs .tab-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          activeLook = btn.dataset.look;
+          populateFiltersAndHero();
+          applyFilterAndRender(true);
+        });
+      });
+
+      const pillsEl = document.getElementById("heroSeriesPills");
+      pillsEl.innerHTML = seriesList.slice(0, 8).map((s, idx) =>
+        `<button class="pill-btn ${idx === 0 ? "active" : ""}" data-series="${s}">${s}</button>`
+      ).join("");
+
+      pillsEl.querySelectorAll(".pill-btn").forEach((p) => {
+        p.addEventListener("click", () => {
+          const sName = p.dataset.series;
+          const match = catalogItems.find((i) => i.series === sName);
+          if (match) {
+            document.getElementById("heroTitle").textContent = `${match.series} Collection`;
+            document.getElementById("heroDesc").textContent =
+              `${catalogItems.length.toLocaleString()} indexed Simpolo items ready to filter and preview live on your floor or walls.`;
+            if (match.pbr?.maps?.albedo) {
+              document.getElementById("heroBg").style.backgroundImage = `url("${match.pbr.maps.albedo}")`;
+            }
+          }
+          document.getElementById("seriesFilter").value = sName;
+          pillsEl.querySelectorAll(".pill-btn").forEach((b) => b.classList.toggle("active", b.dataset.series === sName));
+          applyFilterAndRender(true);
+        });
+      });
+    }
+
+    const surfaceSelect = document.getElementById("surfaceSelect");
+    const skuSelect = document.getElementById("skuSelect");
+    const patternSelect = document.getElementById("patternSelect");
+    const groutMmInput = document.getElementById("groutMm");
+    const groutColorInput = document.getElementById("groutColor");
+
+    function syncControlsFromActiveSurface() {
+      const cfg = surfaceState[surfaceSelect.value];
+      if (!cfg) return;
+      if (cfg.skuId) skuSelect.value = cfg.skuId;
+      patternSelect.value = cfg.pattern;
+      groutMmInput.value = cfg.groutMm;
+      groutColorInput.value = cfg.groutHex;
+    }
+
+    function applyControlChangeToActiveSurface() {
+      const key = surfaceSelect.value;
+      const cfg = surfaceState[key];
+      if (!cfg) return;
+      cfg.skuId = skuSelect.value;
+      cfg.pattern = patternSelect.value;
+      cfg.groutMm = Math.max(0, parseFloat(groutMmInput.value) || 0);
+      cfg.groutHex = groutColorInput.value;
+      renderSurfaceMaterial(key);
+      updateBoqSummary();
+    }
+
+    fetch("full_catalog.json")
+      .then((r) => r.json())
+      .then((data) => {
+        catalogItems = data.items || [];
+        // Keep initial dropdown snappy with first 200 items + active surface SKUs
+        skuSelect.innerHTML = catalogItems.slice(0, 200)
+          .map((item) => `<option value="${item.id}">${item.series} — ${item.name}</option>`)
+          .join("");
+
+        if (catalogItems.length > 0) {
+          const s0 = catalogItems[0];
+          const s1 = catalogItems[Math.min(1, catalogItems.length - 1)];
+          const s2 = catalogItems[Math.min(2, catalogItems.length - 1)];
+          [s0, s1, s2].forEach(ensureSkuInDropdown);
+
+          surfaceState.floor.skuId = s0.id;
+          surfaceState.backWall.skuId = s1.id;
+          surfaceState.sideWall.skuId = s2.id;
+
+          if (s0.pbr?.maps?.albedo) {
+            document.getElementById("heroBg").style.backgroundImage = `url("${s0.pbr.maps.albedo}")`;
+          }
+          document.getElementById("heroTitle").textContent = `${catalogItems.length.toLocaleString()} Simpolo Surfaces in 3D`;
+
+          populateFiltersAndHero();
+          applyFilterAndRender(true);
+          syncControlsFromActiveSurface();
+          rebuildRoomGeometry();
+        }
+      })
+      .catch((err) => {
+        document.getElementById("catalogCount").textContent = "Run build_full_web_catalog.py first to generate full_catalog.json.";
+        console.error(err);
+      });
+
+    document.getElementById("searchInput").addEventListener("input", () => applyFilterAndRender(true));
+    document.getElementById("seriesFilter").addEventListener("change", () => applyFilterAndRender(true));
+    document.getElementById("sizeFilter").addEventListener("change", () => applyFilterAndRender(true));
+    document.getElementById("loadMoreBtn").addEventListener("click", () => {
+      visibleCount += PAGE_SIZE;
+      applyFilterAndRender(false);
+    });
+
+    surfaceSelect.addEventListener("change", syncControlsFromActiveSurface);
+    skuSelect.addEventListener("change", applyControlChangeToActiveSurface);
+    patternSelect.addEventListener("change", applyControlChangeToActiveSurface);
+    groutMmInput.addEventListener("input", applyControlChangeToActiveSurface);
+    groutColorInput.addEventListener("input", applyControlChangeToActiveSurface);
+    ["roomW", "roomD", "roomH"].forEach((id) => document.getElementById(id).addEventListener("input", rebuildRoomGeometry));
+    document.getElementById("wastagePct").addEventListener("input", updateBoqSummary);
+
+    const lightSlider = document.getElementById("lightSlider");
+    const lightVal = document.getElementById("lightVal");
+    lightSlider.addEventListener("input", () => {
+      dirLight.intensity = parseFloat(lightSlider.value);
+      lightVal.textContent = dirLight.intensity.toFixed(2);
+    });
+
+    document.getElementById("exportBoqBtn").addEventListener("click", () => {
+      navigator.clipboard?.writeText(document.getElementById("boqSummary").innerText);
+      const btn = document.getElementById("exportBoqBtn");
+      btn.textContent = "Copied BOQ Summary!";
+      setTimeout(() => { btn.textContent = "Copy BOQ Summary"; }, 1800);
+    });
+
+    window.addEventListener("resize", () => {
+      if (!host.clientWidth || !host.clientHeight) return;
+      camera.aspect = host.clientWidth / host.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(host.clientWidth, host.clientHeight);
+    });
+
+    (function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    })();
+  </script>
+</body>
+</html>
