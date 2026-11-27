@@ -1,9 +1,29 @@
+import os
+import shutil
 from pathlib import Path
 
+BASE_DIR = Path(__file__).resolve().parent
 OUT_HTML = Path(r"D:\3D_Visualizer_Assets\Simpolo_Raw\web_prototype\index.html")
 OUT_HTML.parent.mkdir(parents=True, exist_ok=True)
 
-HTML = """<!DOCTYPE html>
+BOQ_CANDIDATES = [
+    OUT_HTML.parent / "boq.mjs",
+    BASE_DIR / "boq.mjs",
+    BASE_DIR / "web_prototype" / "boq.mjs",
+]
+BOQ_DST = OUT_HTML.parent / "boq.mjs"
+
+for cand in BOQ_CANDIDATES:
+    if cand.exists() and cand.resolve() != BOQ_DST.resolve():
+        try:
+            if BOQ_DST.exists():
+                BOQ_DST.unlink()
+            os.link(cand, BOQ_DST)
+        except OSError:
+            shutil.copy2(cand, BOQ_DST)
+        break
+
+HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -18,6 +38,7 @@ HTML = """<!DOCTYPE html>
       --line: #e4e2dc;
       --accent: #9a5b13;
       --accent-dark: #78440b;
+      --warn: #b45309;
       --dark-panel: #18191c;
     }
     * { box-sizing: border-box; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
@@ -116,7 +137,7 @@ HTML = """<!DOCTYPE html>
     .load-more-btn:hover { background: var(--ink); color: #fff; }
 
     .studio-band { background: #efede8; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-    .studio-grid { display: grid; grid-template-columns: 345px 1fr; gap: 20px; align-items: start; }
+    .studio-grid { display: grid; grid-template-columns: 355px 1fr; gap: 20px; align-items: start; }
     @media (max-width: 920px) { .studio-grid { grid-template-columns: 1fr; } }
 
     .controls-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
@@ -131,6 +152,8 @@ HTML = """<!DOCTYPE html>
     input[type="color"] { width: 100%; height: 30px; border: 1px solid #d4d4d8; border-radius: 6px; padding: 2px; background: #fff; }
     .g-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .g-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+    .check-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; margin-top: 8px; }
+    .check-row input { width: auto; }
 
     .viewer-wrap {
       background: var(--dark-panel); border-radius: 10px; overflow: hidden;
@@ -146,12 +169,21 @@ HTML = """<!DOCTYPE html>
     .boq-panel { margin-top: 10px; background: #faf9f6; border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 12px; }
     .boq-row { display: flex; justify-content: space-between; gap: 8px; line-height: 1.5; }
     .boq-line { padding-bottom: 6px; margin-bottom: 6px; border-bottom: 1px dashed var(--line); }
+    .boq-flag { color: var(--warn); font-size: 11px; font-weight: 600; margin-top: 2px; }
+    .boq-consumables { color: var(--muted); font-size: 11px; margin-top: 6px; line-height: 1.45; }
     .boq-total { margin-top: 6px; padding-top: 6px; border-top: 1px solid #d4d4d8; font-weight: 700; color: var(--accent-dark); }
+    .boq-incomplete { color: var(--warn); font-size: 11px; font-weight: 600; margin-top: 4px; }
+    .boq-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
     .copy-btn {
-      margin-top: 10px; width: 100%; padding: 8px; border-radius: 6px; border: none;
+      width: 100%; padding: 8px; border-radius: 6px; border: none;
       background: var(--accent); color: #fff; font-weight: 600; font-size: 12.5px; cursor: pointer;
     }
     .copy-btn:hover { background: var(--accent-dark); }
+    .csv-btn {
+      width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--ink);
+      background: #fff; color: var(--ink); font-weight: 600; font-size: 12.5px; cursor: pointer;
+    }
+    .csv-btn:hover { background: var(--ink); color: #fff; }
 
     footer { background: #18181b; color: #d4d4d8; padding: 28px 20px; }
     .foot-wrap { max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; font-size: 12.5px; }
@@ -237,7 +269,7 @@ HTML = """<!DOCTYPE html>
           <label for="skuSelect">Active Surface SKU</label>
           <select id="skuSelect"></select>
 
-          <h3>Pattern &amp; Grout</h3>
+          <h3>Pattern, Openings &amp; Grout</h3>
           <div class="g-2">
             <div>
               <label for="patternSelect">Layout</label>
@@ -257,12 +289,25 @@ HTML = """<!DOCTYPE html>
             <div><label for="wastagePct">Wastage (%)</label><input id="wastagePct" type="number" min="0" max="30" step="1" value="10" /></div>
           </div>
 
+          <div class="g-2">
+            <div><label for="openBack">Back Wall Openings (m²)</label><input id="openBack" type="number" min="0" max="50" step="0.1" value="0" /></div>
+            <div><label for="openSide">Side Wall Openings (m²)</label><input id="openSide" type="number" min="0" max="50" step="0.1" value="0" /></div>
+          </div>
+
+          <label class="check-row" for="toggleSkirting">
+            <span>100mm Floor Skirting</span>
+            <input id="toggleSkirting" type="checkbox" checked />
+          </label>
+
           <label for="lightSlider">Daylight Intensity: <span id="lightVal">1.35</span></label>
           <input id="lightSlider" type="range" min="0.4" max="2.5" step="0.05" value="1.35" />
 
           <h3 id="boq">BOQ Estimate (INR)</h3>
           <div class="boq-panel" id="boqSummary">Loading BOQ...</div>
-          <button class="copy-btn" id="exportBoqBtn">Copy BOQ Summary</button>
+          <div class="boq-actions">
+            <button class="copy-btn" id="exportBoqBtn">Copy Summary</button>
+            <button class="csv-btn" id="exportCsvBtn">Export CSV</button>
+          </div>
         </div>
 
         <div class="viewer-wrap">
@@ -283,12 +328,21 @@ HTML = """<!DOCTYPE html>
   <script type="module">
     import * as THREE from "three";
     import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+    import { computeBOQ, flagText, boqToCsv, readTileSpec } from "./boq.mjs";
 
     const PAGE_SIZE = 48;
     let catalogItems = [];
     let filteredItems = [];
     let visibleCount = PAGE_SIZE;
     let activeLook = "All";
+
+    function numInput(id, fallback, min = -Infinity, max = Infinity, writeBack = false) {
+      const el = document.getElementById(id);
+      const raw = parseFloat(el?.value);
+      const val = Math.min(max, Math.max(min, Number.isFinite(raw) ? raw : fallback));
+      if (writeBack && el) el.value = String(val);
+      return val;
+    }
 
     const host = document.getElementById("canvasHost");
     const scene = new THREE.Scene();
@@ -336,10 +390,15 @@ HTML = """<!DOCTYPE html>
       sideWall: { label: "Side Wall", mesh: sideWallMesh, widthM: 4.0, heightM: 3.0, skuId: null, pattern: "grid", groutMm: 2.0, groutHex: "#e2dfd9" }
     };
 
+    function getSurfaceSku(surfKey) {
+      const cfg = surfaceState[surfKey];
+      return catalogItems.find((i) => i.id === cfg?.skuId) || null;
+    }
+
     function rebuildRoomGeometry() {
-      const w = Math.max(2, parseFloat(document.getElementById("roomW").value) || 5.0);
-      const d = Math.max(2, parseFloat(document.getElementById("roomD").value) || 4.0);
-      const h = Math.max(2.2, parseFloat(document.getElementById("roomH").value) || 3.0);
+      const w = numInput("roomW", 5.0, 2, 20, true);
+      const d = numInput("roomD", 4.0, 2, 20, true);
+      const h = numInput("roomH", 3.0, 2.2, 6, true);
 
       surfaceState.floor.widthM = w; surfaceState.floor.heightM = d;
       floorMesh.geometry.dispose();
@@ -360,8 +419,9 @@ HTML = """<!DOCTYPE html>
     }
 
     function buildTiledCanvasTextures(img, sku, cfg) {
-      const tileW = sku.dimensionsMm?.width || 600;
-      const tileH = sku.dimensionsMm?.height || 1200;
+      const spec = readTileSpec(sku);
+      const tileW = spec.widthMm || 600;
+      const tileH = spec.heightMm || 1200;
       const groutMm = Math.max(0, cfg.groutMm);
       const unitW = tileW + groutMm;
       const unitH = tileH + groutMm;
@@ -420,7 +480,7 @@ HTML = """<!DOCTYPE html>
 
     function renderSurfaceMaterial(surfKey) {
       const cfg = surfaceState[surfKey];
-      const sku = catalogItems.find((i) => i.id === cfg.skuId);
+      const sku = getSurfaceSku(surfKey);
       if (!sku) return;
 
       const pbr = sku.pbr || {};
@@ -452,35 +512,73 @@ HTML = """<!DOCTYPE html>
       cfg.mesh.material = mat;
     }
 
-    function updateBoqSummary() {
-      const wastagePct = Math.max(0, parseFloat(document.getElementById("wastagePct").value) || 0);
-      const factor = 1 + wastagePct / 100;
-      const boqEl = document.getElementById("boqSummary");
-
-      let grandSqFt = 0, grandCost = 0, html = "";
-      Object.values(surfaceState).forEach((surf) => {
-        const sku = catalogItems.find((i) => i.id === surf.skuId);
-        if (!sku) return;
-        const w = sku.dimensionsMm?.width || 600;
-        const h = sku.dimensionsMm?.height || 1200;
-        const grossSqFt = surf.widthM * surf.heightM * 10.7639 * factor;
-        const tileSqFt = ((w * h) / 92903.04) || 1;
-        const pieces = Math.ceil(grossSqFt / tileSqFt);
-        const rate = sku.pricing?.ratePerSqFt || 95;
-        const estCost = grossSqFt * rate;
-        grandSqFt += grossSqFt; grandCost += estCost;
-
-        html += `<div class="boq-line">
-          <div class="boq-row"><strong>${surf.label}:</strong><span>${sku.series} (${w}x${h}mm)</span></div>
-          <div class="boq-row"><span>${surf.pattern} &bull; ${surf.groutMm}mm</span><span>${grossSqFt.toFixed(1)} sq.ft (${pieces} pcs)</span></div>
-          <div class="boq-row"><span>@ ₹${rate}/sq.ft:</span><span>₹${Math.round(estCost).toLocaleString("en-IN")}</span></div>
-        </div>`;
+    function currentBOQ() {
+      const w = numInput("roomW", 5.0, 2, 20, true);
+      const d = numInput("roomD", 4.0, 2, 20, true);
+      const h = numInput("roomH", 3.0, 2.2, 6, true);
+      return computeBOQ({
+        room: { w, d, h },
+        surfaces: {
+          floor: getSurfaceSku("floor"),
+          backWall: getSurfaceSku("backWall"),
+          sideWall: getSurfaceSku("sideWall"),
+        },
+        wastagePct: numInput("wastagePct", 10, 0, 30, true),
+        pattern: document.getElementById("patternSelect").value,
+        groutMm: numInput("groutMm", 2.0, 0, 15, true),
+        openings: {
+          backWall: numInput("openBack", 0, 0, 50, true),
+          sideWall: numInput("openSide", 0, 0, 50, true),
+        },
+        skirting: {
+          enabled: document.getElementById("toggleSkirting").checked,
+          lengthM: w + d,
+        },
       });
+    }
+
+    function updateBoqSummary() {
+      const boqEl = document.getElementById("boqSummary");
+      if (!getSurfaceSku("floor") || !getSurfaceSku("backWall") || !getSurfaceSku("sideWall")) {
+        boqEl.textContent = "Waiting for catalog SKUs...";
+        return;
+      }
+      const boq = currentBOQ();
+      const { lines, totals } = boq;
+      const pattern = document.getElementById("patternSelect").value;
+      const groutMm = numInput("groutMm", 2.0, 0, 15, true);
+
+      let html = lines.map((l) => {
+        const qtyText = l.pieces !== null
+          ? `${l.purchasedSqFt.toFixed(1)} sq.ft (${l.pieces} pcs${l.boxes !== null ? `, ${l.boxes} box` : ""})`
+          : "Quantity unavailable";
+        const rateText = l.rate !== null ? ` @ ₹${l.rate}` : "";
+        const amtText = l.amount !== null ? `₹${l.amount.toLocaleString("en-IN")}` : "—";
+        const flagsHtml = (l.flags || []).length
+          ? `<div class="boq-flag">${(l.flags || []).map(flagText).join(" • ")}</div>`
+          : "";
+        return `<div class="boq-line">
+          <div class="boq-row"><strong>${(l.roles || []).join(" + ")}:</strong><span>${l.series} (${l.sizeLabel})</span></div>
+          <div class="boq-row"><span>${pattern} &bull; ${groutMm}mm</span><span>${qtyText}${rateText}</span></div>
+          <div class="boq-row"><span>Line Total:</span><span>${amtText}</span></div>
+          ${flagsHtml}
+        </div>`;
+      }).join("");
+
+      html += `<div class="boq-consumables">
+        Adhesive: ~${totals.adhesiveKg.toFixed(1)} kg (${totals.adhesiveBags} bags @ 20kg) &bull;
+        Grout: ~${totals.groutKg.toFixed(2)} kg (assumes ${totals.groutAssumedThicknessMm}mm bed depth)
+      </div>`;
 
       html += `<div class="boq-total">
-        <div class="boq-row"><span>Total (+${wastagePct}% waste):</span><span>${grandSqFt.toFixed(1)} sq.ft</span></div>
-        <div class="boq-row"><span>Est. Material (excl. GST):</span><span>₹${Math.round(grandCost).toLocaleString("en-IN")}</span></div>
+        <div class="boq-row"><span>Gross (${totals.effectiveWastePct}% eff. waste):</span><span>${totals.grossSqM.toFixed(1)} m²</span></div>
+        <div class="boq-row"><span>Est. Material (excl. GST):</span><span>₹${(totals.amount || 0).toLocaleString("en-IN")}</span></div>
       </div>`;
+
+      if (totals.incomplete) {
+        html += `<div class="boq-incomplete">Total is incomplete — one or more SKUs have missing size or rate data.</div>`;
+      }
+
       boqEl.innerHTML = html;
     }
 
@@ -503,7 +601,8 @@ HTML = """<!DOCTYPE html>
       filteredItems = catalogItems.filter((item) => {
         if (activeLook !== "All" && item.lookAndFeel !== activeLook) return false;
         if (sVal !== "All" && item.series !== sVal) return false;
-        const sizeStr = `${item.dimensionsMm?.width || 600}x${item.dimensionsMm?.height || 1200}`;
+        const spec = readTileSpec(item);
+        const sizeStr = spec.sizeKnown ? `${spec.widthMm}x${spec.heightMm}` : "";
         if (szVal !== "All" && sizeStr !== szVal) return false;
         if (q) {
           const hay = `${item.name || ""} ${item.series || ""} ${item.finish || ""} ${sizeStr}`.toLowerCase();
@@ -517,15 +616,16 @@ HTML = """<!DOCTYPE html>
 
       const slice = filteredItems.slice(0, visibleCount);
       document.getElementById("skuCards").innerHTML = slice.map((item) => {
-        const w = item.dimensionsMm?.width || 600;
-        const h = item.dimensionsMm?.height || 1200;
+        const spec = readTileSpec(item);
+        const dimLabel = spec.sizeKnown ? `${spec.widthMm}x${spec.heightMm}mm` : "Size unknown";
+        const rateLabel = spec.rateKnown ? `₹${spec.rate}/sq.ft` : "Rate on request";
         return `<div class="card">
           <img class="card-thumb" src="${item.pbr?.maps?.albedo || ""}" alt="${item.name}" loading="lazy" />
           <div class="card-body">
             <div>
               <div class="card-series">${item.series}</div>
               <div class="card-title">${item.name}</div>
-              <div class="card-meta">${w}x${h}mm &bull; ₹${item.pricing?.ratePerSqFt || 95}/sq.ft</div>
+              <div class="card-meta">${dimLabel} &bull; ${rateLabel}</div>
             </div>
             <button class="card-btn" data-apply-sku="${item.id}">Apply in 3D Room</button>
           </div>
@@ -550,7 +650,10 @@ HTML = """<!DOCTYPE html>
 
     function populateFiltersAndHero() {
       const seriesList = [...new Set(catalogItems.map((i) => i.series).filter(Boolean))].sort();
-      const sizeList = [...new Set(catalogItems.map((i) => `${i.dimensionsMm?.width || 600}x${i.dimensionsMm?.height || 1200}`))].sort();
+      const sizeList = [...new Set(catalogItems.map((i) => {
+        const sp = readTileSpec(i);
+        return sp.sizeKnown ? `${sp.widthMm}x${sp.heightMm}` : null;
+      }).filter(Boolean))].sort();
       const lookList = ["All", ...new Set(catalogItems.map((i) => i.lookAndFeel).filter(Boolean))];
 
       document.getElementById("seriesFilter").innerHTML =
@@ -618,7 +721,7 @@ HTML = """<!DOCTYPE html>
       if (!cfg) return;
       cfg.skuId = skuSelect.value;
       cfg.pattern = patternSelect.value;
-      cfg.groutMm = Math.max(0, parseFloat(groutMmInput.value) || 0);
+      cfg.groutMm = numInput("groutMm", 2.0, 0, 15, true);
       cfg.groutHex = groutColorInput.value;
       renderSurfaceMaterial(key);
       updateBoqSummary();
@@ -628,7 +731,6 @@ HTML = """<!DOCTYPE html>
       .then((r) => r.json())
       .then((data) => {
         catalogItems = data.items || [];
-        // Keep initial dropdown snappy with first 200 items + active surface SKUs
         skuSelect.innerHTML = catalogItems.slice(0, 200)
           .map((item) => `<option value="${item.id}">${item.series} — ${item.name}</option>`)
           .join("");
@@ -673,7 +775,8 @@ HTML = """<!DOCTYPE html>
     groutMmInput.addEventListener("input", applyControlChangeToActiveSurface);
     groutColorInput.addEventListener("input", applyControlChangeToActiveSurface);
     ["roomW", "roomD", "roomH"].forEach((id) => document.getElementById(id).addEventListener("input", rebuildRoomGeometry));
-    document.getElementById("wastagePct").addEventListener("input", updateBoqSummary);
+    ["wastagePct", "openBack", "openSide"].forEach((id) => document.getElementById(id).addEventListener("input", updateBoqSummary));
+    document.getElementById("toggleSkirting").addEventListener("change", updateBoqSummary);
 
     const lightSlider = document.getElementById("lightSlider");
     const lightVal = document.getElementById("lightVal");
@@ -687,6 +790,15 @@ HTML = """<!DOCTYPE html>
       const btn = document.getElementById("exportBoqBtn");
       btn.textContent = "Copied BOQ Summary!";
       setTimeout(() => { btn.textContent = "Copy BOQ Summary"; }, 1800);
+    });
+
+    document.getElementById("exportCsvBtn").addEventListener("click", () => {
+      const csv = boqToCsv(currentBOQ());
+      const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "Simpolo_3D_Room_BOQ.csv";
+      a.click();
     });
 
     window.addEventListener("resize", () => {
